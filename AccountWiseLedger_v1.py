@@ -12,6 +12,8 @@ from argparse import ArgumentParser
 import socket
 
 app = Flask(__name__)
+
+
 class AccountWiseLedger(object):
 
     def __init__(self, ownerID, address):
@@ -19,8 +21,7 @@ class AccountWiseLedger(object):
         self.__address = address
         self.__powDifficulty = 5
         self.__transactionChain = Blockchain(self.__ownerID, self.__powDifficulty)
-    
-    
+
     def sendRequest(self, target_address):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.bind(('target_address', 50000))
@@ -32,7 +33,7 @@ class AccountWiseLedger(object):
                 break
             conn.sendall(data)
         conn.close()
-        
+
     def receiveResult(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect(('localhost', 50000))
@@ -45,9 +46,9 @@ class AccountWiseLedger(object):
 def testAccount():
     account = AccountWiseLedger("testAccount", "127.0.0.1:5001")
     account.sendRequest()
-         
+
+
 if __name__ == '__main__':
-    
     parser = ArgumentParser()
     parser.add_argument('-H', '--host', default='127.0.0.1')
     parser.add_argument('-p', '--port', default=5001, type=int)
