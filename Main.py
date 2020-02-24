@@ -14,10 +14,12 @@ def joinNetwork():
     # retrieve the address table for every member in the network
     return accountID, accountAddress, accountWiseLedgerList
 
+
 @app.route("/transactions/new")
 def newTransaction():
     # create new transaction task for me, broadcast the task to everyone and wait for a new high council to solve it.
     return
+
 
 @app.route("/mine")
 def incommingTask():
