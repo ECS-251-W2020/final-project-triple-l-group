@@ -10,9 +10,9 @@ class Blockchain(object):
         self.__powDifficulty = powDifficulty
         self.__balance = 0
         self.__chain = [{
-            "index": 0,
+            "taskID": None,
             "memo": "Chain Head",
-            "preHash": 0
+            "preHash": None
         }]
 
     def __len__(self):
@@ -48,9 +48,9 @@ class Blockchain(object):
         return self.__balance
 
     @staticmethod
-    def createNewBlock(powDifficulty, index, senderID, receiverID, amount, preHash):
+    def createNewBlock(powDifficulty, taskID, senderID, receiverID, amount, preHash):
         block = {
-            "index": index,
+            "taskID": taskID,
             "timestamp": time(),
             "senderID": senderID,
             "receiverID": receiverID,

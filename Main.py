@@ -1,42 +1,57 @@
 from AccountWiseLedger import AccountWiseLedger
-from flask import Flask
+from flask import Flask, request
 from argparse import ArgumentParser
 
+
+class LocalData(object):
+
+    def __init__(self):
+
+        self.__accountID = "AAA"
+        self.__accountAddress = ""
+        self.__accountWiseLedgerList = {"AAA": AccountWiseLedger("AAA", "A")}
+
+        # Create Main Frame
+        # first join the network, initialization
+        # create new AccountWiseLedger class for me
+        # retrieve others AccountWiseLedgers from the network
+        # retrieve the address table for every member in the network
+
+    def newTransaction(self, task):
+        return self.__accountWiseLedgerList[self.__accountID].newTransaction(task)
+
+
 app = Flask(__name__)
+myLocalData = LocalData()
 
 
-def joinNetwork():
-    accountID, accountAddress = "", ""
-    accountWiseLedgerList = {}
-    # first join the network, initialization
-    # create new AccountWiseLedger class for me
-    # retrieve others AccountWiseLedgers from the network
-    # retrieve the address table for every member in the network
-    return accountID, accountAddress, accountWiseLedgerList
-
-
-@app.route("/transactions/new")
+@app.route("/transactions/new/", methods=["POST"])
 def newTransaction():
     # create new transaction task for me, broadcast the task to everyone and wait for a new high council to solve it.
-    return
+    task = request.get_json()
+    required = ["senderID", "receiverID", "amount"]
+    if not all(k in task for k in required):
+        return 'Missing values', 400
+
+    print("Append New Transaction: ", myLocalData.newTransaction(task))
+    print("Someone Called New Transactions", task)
+    return "New Transaction" + str(task)
 
 
-@app.route("/mine")
+@app.route("/mine", methods=["GET"])
 def incommingTask():
     # election, mining, share results to high council members, share result to everyone in the network
-    return
+    print("Someone Called Mine")
+    return "Mine"
 
 
 def main():
-    accountID, accountAddress, accountWiseLedgerList = joinNetwork()
-
     parser = ArgumentParser()
     parser.add_argument("-H", "--host", default="127.0.0.1")
-    parser.add_argument("-p", "--port", default=5001, type=int)
+    parser.add_argument("-p", "--port", default=5000, type=int)
     args = parser.parse_args()
 
     app.run(host=args.host, port=args.port, debug=True)
-    return
 
 
 if __name__ == "__main__":
