@@ -3,7 +3,7 @@ from flask import Flask, request
 from argparse import ArgumentParser
 
 
-class LocalData(object):
+class UserInterface(object):
 
     def __init__(self):
 
@@ -22,7 +22,7 @@ class LocalData(object):
 
 
 app = Flask(__name__)
-myLocalData = LocalData()
+myLocalData = UserInterface()
 
 
 @app.route("/transactions/new/", methods=["POST"])
@@ -45,7 +45,7 @@ def incommingTask():
     return "Mine"
 
 
-def main():
+def flaskMain():
     parser = ArgumentParser()
     parser.add_argument("-H", "--host", default="127.0.0.1")
     parser.add_argument("-p", "--port", default=5000, type=int)
@@ -55,4 +55,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    flaskMain()
