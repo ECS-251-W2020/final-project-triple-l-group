@@ -2,10 +2,17 @@ import socket
 import json
 
 
-def testMain():
+def main():
     dnsSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    DNSTable = {}
     port = 8000
+
+    K_numOfSubNetwork = 1
+    DNSTable = {
+        "all": {},
+        "nodeToSubNetwork": {},
+        "subNetworkToNode": {index: {} for index in range(K_numOfSubNetwork)},
+        "sizeOfSubNetwork": {index: 0 for index in range(K_numOfSubNetwork)}
+    }
 
     def getHostnameIP():
         try:
@@ -15,7 +22,7 @@ def testMain():
 
     try:
         dnsSocket.bind((getHostnameIP(), port))
-        print("DNS is online, the IP and Port is: ", getHostnameIP(), ":", port)
+        print("DNS is online, the IP/Port is [", getHostnameIP(), ":", port, "]")
     except:
         print("Error occurred. Server shutdown...")
         return
@@ -23,21 +30,30 @@ def testMain():
     while True:
         inputMsg, sourceAddress = dnsSocket.recvfrom(1024)
         inputMsg = json.loads(inputMsg.decode())
+        newPeer = None
 
-        print(sourceAddress, " is connected. Action Type [", inputMsg["type"], "]")
+        print(sourceAddress, "a.k.a [", inputMsg["senderID"], "] is connected. Action Type [", inputMsg["type"], "]")
         if inputMsg["type"] == "New Peer":
-            DNSTable[inputMsg["data"]] = sourceAddress
-            outputMsg = {"type": "DNS update", "data": DNSTable}
 
-            for node in DNSTable.values():
-                dnsSocket.sendto(json.dumps(outputMsg).encode(), node)
+            if inputMsg["senderID"] not in DNSTable["all"]:
+                newPeer = inputMsg["senderID"]
+                assignedSubNetworkIndex = min(DNSTable["sizeOfSubNetwork"].keys(), key=lambda x: DNSTable["sizeOfSubNetwork"][x])
+                DNSTable["subNetworkToNode"][assignedSubNetworkIndex][inputMsg["senderID"]] = True
+                DNSTable["nodeToSubNetwork"][inputMsg["senderID"]] = assignedSubNetworkIndex
+                DNSTable["sizeOfSubNetwork"][assignedSubNetworkIndex] += 1
+            DNSTable["all"][inputMsg["senderID"]] = sourceAddress
 
-        elif inputMsg["type"] == "Request Update":
-            DNSTable[inputMsg["data"]] = sourceAddress
-            outputMsg = {"type": "DNS update", "data": DNSTable}
+            outputMsg = {"type": "DNS update", "data": DNSTable, "newPeer": newPeer}
+
+            for nodeAddr in DNSTable["all"].values():
+                dnsSocket.sendto(json.dumps(outputMsg).encode(), nodeAddr)
+
+        elif inputMsg["type"] == "Request DNS Update":
+            DNSTable["all"][inputMsg["senderID"]] = sourceAddress
+            outputMsg = {"type": "DNS update", "data": DNSTable, "newPeer": newPeer}
 
             dnsSocket.sendto(json.dumps(outputMsg).encode(), sourceAddress)
 
 
 if __name__ == "__main__":
-    testMain()
+    main()

@@ -5,24 +5,32 @@ from time import time
 
 class Blockchain(object):
 
-    def __init__(self, ownerID, powDifficulty):
+    def __init__(self, ownerID, powDifficulty, balance=1000, chain=None):
         self.__ownerID = ownerID
         self.__powDifficulty = powDifficulty
-        self.__balance = 0
-        self.__chain = [{
-            "taskID": None,
-            "memo": "Chain Head",
-            "preHash": None
-        }]
+        self.__balance = balance
+
+        if chain is None:
+            self.__chain = [{
+                "taskID": "None",
+                "memo": "Chain Head",
+                "amount": 1000,
+                "preHash": "None"
+            }]
+        else:
+            self.__chain = chain
+
+    @classmethod
+    def createByJsonBytes(cls, inputStr):
+        input = json.loads(inputStr)
+        return cls(input["ownerID"], input["powDifficulty"], input["balance"], input["chain"])
 
     def __len__(self):
         return len(self.__chain)
 
     def __str__(self):
-        ans = "<---------START CHAIN--------->\n"
-        for block in self.__chain:
-            ans += str(block) + ":" + self.hash256(block) + "\n"
-        return ans + "<----------END CHAIN---------->"
+        ans = {"ownerID": self.__ownerID, "powDifficulty": self.__powDifficulty, "balance": self.__balance, "chain": self.__chain}
+        return str(ans).replace("\'", "\"")
 
     def append(self, block):
         if self.validBlock(block, self.__powDifficulty) and block["preHash"] == self.hash256(self.lastBlock) and (block["senderID"] == self.ownerID or block["receiverID"] == self.ownerID):
@@ -46,6 +54,14 @@ class Blockchain(object):
     @property
     def balance(self):
         return self.__balance
+
+    @property
+    def outputDict(self):
+        return {"ownerID": self.__ownerID, "powDifficulty": self.__powDifficulty, "balance": self.__balance, "chain": self.__chain}
+
+    @property
+    def outputJsonBytes(self):
+        return json.dumps(self.outputDict).encode()
 
     @staticmethod
     def createNewBlock(powDifficulty, taskID, senderID, receiverID, amount, preHash):
@@ -84,7 +100,9 @@ def unitTest():
     testChain.append(testBlock)
     testBlock = Blockchain.createNewBlock(testDifficulty, len(testChain), "testReceiver", "testSender", 3500, Blockchain.hash256(testChain.lastBlock))
     testChain.append(testBlock)
-    print(testChain, testChain.balance)
+
+    print(testChain)
+    print(Blockchain.createByJsonBytes(json.dumps(testChain.outputDict)))
 
 
 if __name__ == "__main__":

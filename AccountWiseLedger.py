@@ -1,18 +1,24 @@
-from Blockchain import Blockchain
+from Blockchain import *
 
 
 class AccountWiseLedger(object):
 
-    def __init__(self, ownerID, address):
+    def __init__(self, ownerID, subNetwork, powDifficulty=4, transactionBalance=0, transactionTask=None, blockchain=None):
         self.__ownerID = ownerID
-        self.__address = address
-        self.__powDifficulty = 4
-        self.__transactionTask = {}
-        self.__transactionBalance = 0
-        self.__blockchain = Blockchain(self.__ownerID, self.__powDifficulty)
+        self.__subNetwork = subNetwork
+        self.__powDifficulty = powDifficulty
+        self.__transactionBalance = transactionBalance
+        self.__transactionTask = json.loads(transactionTask) if transactionTask else {}
+
+        self.__blockchain = Blockchain.createByJsonBytes(json.dumps(blockchain)) if blockchain else Blockchain(self.__ownerID, self.__powDifficulty)
+
+    @classmethod
+    def createByJsonBytes(cls, inputStr):
+        input = json.loads(inputStr)
+        return cls(input["ownerID"], input["subNetwork"], input["powDifficulty"], input["transactionBalance"], input["transactionTask"], input["blockchain"])
 
     def __str__(self):
-        return str(self.__blockchain)
+        return str(self.outputDict)
 
     def newTransaction(self, task):
         if (task["senderID"] == self.__ownerID and task["amount"] <= (self.__blockchain.balance + self.__transactionBalance)) or task["receiverID"] == self.__ownerID:
@@ -39,8 +45,8 @@ class AccountWiseLedger(object):
         return self.__ownerID
 
     @property
-    def address(self):
-        return self.__address
+    def subNetwork(self):
+        return self.__subNetwork
 
     @property
     def actualBalance(self):
@@ -49,6 +55,21 @@ class AccountWiseLedger(object):
     @property
     def pendingBalance(self):
         return self.__transactionBalance
+
+    @property
+    def outputDict(self):
+        ans = {
+            "ownerID": self.__ownerID,
+            "subNetwork": self.__subNetwork,
+            "powDifficulty": self.__powDifficulty,
+            "transactionBalance": self.__transactionBalance,
+            "transactionTask": self.__transactionTask,
+            "blockchain": self.__blockchain.outputDict}
+        return ans
+
+    @property
+    def outputJsonBytes(self):
+        return json.dumps(self.outputDict).encode()
 
 
 def unitTest():
@@ -76,6 +97,8 @@ def unitTest():
     testBlock = testAccount.createNewBlock(testTask)
     print("Block Append:", testAccount.receiveResult(testBlock))
     print(testAccount, testAccount.actualBalance, testAccount.pendingBalance)
+
+    print(AccountWiseLedger.createByJsonBytes(testAccount.outputJsonBytes))
 
     return
 
