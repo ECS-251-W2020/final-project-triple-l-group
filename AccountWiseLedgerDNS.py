@@ -1,5 +1,4 @@
-from AccountWiseLedger import AccountWiseLedger
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from argparse import ArgumentParser
 
 app = Flask(__name__)
@@ -9,10 +8,10 @@ DNSTable = {}
 @app.route("/get_list/<myID>", methods=["GET"])
 def get_my_ip(myID):
     DNSTable[myID] = request.remote_addr
-    return DNSTable, 200
+    return jsonify(DNSTable), 200
 
 
-def flaskMain():
+def main():
     parser = ArgumentParser()
     parser.add_argument("-H", "--host", default="127.0.0.1")
     parser.add_argument("-p", "--port", default=5000, type=int)
@@ -22,4 +21,4 @@ def flaskMain():
 
 
 if __name__ == "__main__":
-    flaskMain()
+    main()
