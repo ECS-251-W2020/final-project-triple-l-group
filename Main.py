@@ -45,7 +45,7 @@ class UserInterface(QtWidgets.QMainWindow):
 
         self.__accountID = self.getInputFromPopUpDialog("Your User Name:")
         self.__accountSubNetwork = ""
-        self.__accountWiseLedgerDNS = ("168.150.56.215", 8000)
+        self.__accountWiseLedgerDNS = ("168.150.6.83", 8000)
         self.__nodeList = {}
         self.__accountWiseLedgerList = {}
         self.__vote = collections.Counter()
@@ -70,6 +70,8 @@ class UserInterface(QtWidgets.QMainWindow):
         self.setWindowTitle(self.__programTitle)
 
         # Create Transactions input Field and Current Balance
+        self.__userInfoLabel = QtWidgets.QLabel(self)
+        self.__userInfoLabel.setText("User: " + self.__accountID)
         self.__balanceLine = QtWidgets.QLineEdit()
         self.__transactionLineReceiverID = QtWidgets.QLineEdit()
         self.__transactionLineAmount = QtWidgets.QLineEdit()
@@ -94,15 +96,16 @@ class UserInterface(QtWidgets.QMainWindow):
 
         # Manage the layout
         mainLayout = QtWidgets.QGridLayout()
-        mainLayout.addWidget(self.__peersTable, 0, 0, 4, 2)
-        mainLayout.addWidget(self.__balanceLine, 0, 2, 1, 1)
-        mainLayout.addWidget(self.__transactionLineReceiverID, 1, 2, 1, 1)
-        mainLayout.addWidget(self.__transactionLineAmount, 2, 2, 1, 1)
-        mainLayout.addWidget(self.__makeTransactionButton, 0, 3, 3, 1)
-        mainLayout.addWidget(self.__logFrame, 3, 2, 1, 2)
-        mainLayout.addWidget(self.__dnsUpdateButton, 4, 0, 1, 1)
-        mainLayout.addWidget(self.__awlUpdateButton, 4, 1, 1, 1)
-        mainLayout.addWidget(self.__progressBar, 4, 2, 1, 2)
+        mainLayout.addWidget(self.__peersTable, 0, 0, 5, 2)
+        mainLayout.addWidget(self.__userInfoLabel, 0, 2, 1, 2)
+        mainLayout.addWidget(self.__balanceLine, 1, 2, 1, 1)
+        mainLayout.addWidget(self.__transactionLineReceiverID, 2, 2, 1, 1)
+        mainLayout.addWidget(self.__transactionLineAmount, 3, 2, 1, 1)
+        mainLayout.addWidget(self.__makeTransactionButton, 1, 3, 3, 1)
+        mainLayout.addWidget(self.__logFrame, 4, 2, 1, 2)
+        mainLayout.addWidget(self.__dnsUpdateButton, 5, 0, 1, 1)
+        mainLayout.addWidget(self.__awlUpdateButton, 5, 1, 1, 1)
+        mainLayout.addWidget(self.__progressBar, 5, 2, 1, 2)
 
         self.__centralWidget.setLayout(mainLayout)
         self.show()
@@ -116,7 +119,7 @@ class UserInterface(QtWidgets.QMainWindow):
         else:
             self.awlUpdateButtonHandler()
 
-        self.printLog("INITIALIZATION SYS")
+        self.printLog("INITIALIZATION SYS", "console")
 
     def __getHostnameIP(self):
         try:
@@ -180,6 +183,14 @@ class UserInterface(QtWidgets.QMainWindow):
         elif inputMsg["type"] == "New Transaction":
             print("Receive Task!")
 
+    def __print(self, message, option="gui"):
+        if option == "gui":
+            self.__logFrame.append(message)
+        elif option == "console":
+            print(message)
+        else:
+            print("Wrong option")
+
     def getInputFromPopUpDialog(self, questionString):
         inputText, okPressed = QtWidgets.QInputDialog.getText(self, self.__programTitle, questionString, QtWidgets.QLineEdit.Normal, "")
         if okPressed and inputText:
@@ -200,13 +211,9 @@ class UserInterface(QtWidgets.QMainWindow):
         self.__accountWiseLedgerList[self.__accountID].newTransaction(task)
         self.__broadcast({"type": "New Transaction", "data": task, "senderID": self.__accountID}, set(self.__accountSubNetwork))
 
-    def printLog(self, eventTitle):
-
-        print("\n<----", eventTitle, "---->\n")
-        print("[VoteTable]: ", self.__vote)
-        print("[All Node]:", self.__nodeList)
-        print("[AWL List]: ", self.__accountWiseLedgerList)
-        print("\n<-------------------------->\n")
+    def printLog(self, eventTitle, option="gui"):
+        logInformation = "<----" + eventTitle + "---->\n[VoteTable]: " + str(self.__vote) + "\n[All Node]: " + str(self.__nodeList) + "\n[AWL List]: " + str(self.__accountWiseLedgerList) + "\n<-------------------------->\n"
+        self.__print(logInformation, option)
 
 
 def main():
