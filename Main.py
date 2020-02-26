@@ -8,7 +8,7 @@ import sys
 import collections
 import os
 from distutils.util import strtobool
-from PyQt5 import QtWidgets, QtCore
+from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtCore import QThread, pyqtSignal, QMutex
 from pprint import pprint
 
@@ -20,11 +20,12 @@ class ListenThread(QThread):
         super(ListenThread, self).__init__()
         self.__mutex = QMutex()
         self.__socket = socket
+        self.__socketBufferSize = 1024
 
     def run(self):
         while True:
             self.__mutex.lock()
-            inputMsg, sourceAddress = self.__socket.recvfrom(1024)
+            inputMsg, sourceAddress = self.__socket.recvfrom(self.__socketBufferSize)
             inputMsg = json.loads(inputMsg)
             print("\t<LISTEN SOCKET SIDE>: ", inputMsg)
             self.__mutex.unlock()
@@ -32,7 +33,7 @@ class ListenThread(QThread):
             self.listenedMsg.emit(inputMsg)
 
 
-class UserInterface(QtWidgets.QMainWindow, QThread):
+class UserInterface(QtWidgets.QMainWindow):
 
     def __init__(self):
         super(UserInterface, self).__init__()
@@ -40,22 +41,21 @@ class UserInterface(QtWidgets.QMainWindow, QThread):
         self.__windowStartPositionY = 100
         self.__windowHeight = 600
         self.__windowWidth = 1000
-        self.__programTitle = "User Interface"
+        self.__programTitle = "Account Wise Ledger User Interface"
 
-        self.__accountID = input("User Name: ")
+        self.__accountID = self.getInputFromPopUpDialog("Your User Name:")
         self.__accountSubNetwork = ""
-        self.__accountWiseLedgerDNS = ("192.168.0.29", 8000)
+        self.__accountWiseLedgerDNS = ("168.150.56.215", 8000)
         self.__nodeList = {}
         self.__accountWiseLedgerList = {}
         self.__vote = collections.Counter()
 
         # Initialize the socket
         self.__socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.__socket.bind((self.__getHostnameIP(), 5000))
+        self.__socket.bind((self.__getHostnameIP(), 0))
 
-        # Get Latest IP list from the DNS
+        # Initialize data
         self.__initData()
-        #self.__send({"type": "New Peer", "senderID": self.__accountID}, self.__accountWiseLedgerDNS)
 
         # Multi-Threading for Listening
         self.__mutex = QMutex()
@@ -69,50 +69,60 @@ class UserInterface(QtWidgets.QMainWindow, QThread):
         self.setGeometry(self.__windowStartPositionX, self.__windowStartPositionY, self.__windowWidth, self.__windowHeight)
         self.setWindowTitle(self.__programTitle)
 
-        # Create Article Frame
-        self.__messageFrame = QtWidgets.QTextBrowser(self)
+        # Create Transactions input Field and Current Balance
+        self.__balanceLine = QtWidgets.QLineEdit()
+        self.__transactionLineReceiverID = QtWidgets.QLineEdit()
+        self.__transactionLineAmount = QtWidgets.QLineEdit()
+        self.__makeTransactionButton = QtWidgets.QPushButton("Make Transaction", self)
+        self.__makeTransactionButton.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
+        self.__makeTransactionButton.clicked.connect(self.newTransactionButtonHandler)
 
-        self.__awlUpdateButton = QtWidgets.QPushButton("Update Account Wise Ledger List", self)
+        # Create Peers Table
+        self.__peersTable = QtWidgets.QTextBrowser(self)
+
+        # Create Log Frame
+        self.__logFrame = QtWidgets.QTextBrowser(self)
+
+        # Create Buttons
+        self.__awlUpdateButton = QtWidgets.QPushButton("Update AWL List", self)
         self.__awlUpdateButton.clicked.connect(self.awlUpdateButtonHandler)
         self.__dnsUpdateButton = QtWidgets.QPushButton("Update Peer List", self)
         self.__dnsUpdateButton.clicked.connect(self.dnsUpdateButtonHandler)
 
+        # Create Progress Bar
+        self.__progressBar = QtWidgets.QProgressBar(self)
+
         # Manage the layout
         mainLayout = QtWidgets.QGridLayout()
-        mainLayout.addWidget(self.__messageFrame, 0, 0, 1, 2)
-        mainLayout.addWidget(self.__dnsUpdateButton, 1, 0, 1, 1)
-        mainLayout.addWidget(self.__awlUpdateButton, 1, 1, 1, 1)
+        mainLayout.addWidget(self.__peersTable, 0, 0, 4, 2)
+        mainLayout.addWidget(self.__balanceLine, 0, 2, 1, 1)
+        mainLayout.addWidget(self.__transactionLineReceiverID, 1, 2, 1, 1)
+        mainLayout.addWidget(self.__transactionLineAmount, 2, 2, 1, 1)
+        mainLayout.addWidget(self.__makeTransactionButton, 0, 3, 3, 1)
+        mainLayout.addWidget(self.__logFrame, 3, 2, 1, 2)
+        mainLayout.addWidget(self.__dnsUpdateButton, 4, 0, 1, 1)
+        mainLayout.addWidget(self.__awlUpdateButton, 4, 1, 1, 1)
+        mainLayout.addWidget(self.__progressBar, 4, 2, 1, 2)
 
         self.__centralWidget.setLayout(mainLayout)
         self.show()
 
-        # Create Main Frame
-        # first join the network, initialization
-        # create new AccountWiseLedger class for me
-        # retrieve others AccountWiseLedgers from the network
-        # retrieve the address table for every member in the network
-
     def __initData(self):
         self.__send({"type": "New Peer", "senderID": self.__accountID}, self.__accountWiseLedgerDNS)
         self.__nodeList = self.__listen()["data"]
-        if len(self.__nodeList["subNetworkToNode"][str(self.__nodeList["nodeToSubNetwork"][self.__accountID])]) == 1:
+        self.__accountSubNetwork = str(self.__nodeList["nodeToSubNetwork"][self.__accountID])
+        if len(self.__nodeList["subNetworkToNode"][self.__accountSubNetwork]) == 1:
             self.__accountWiseLedgerList[self.__accountID] = AccountWiseLedger(self.__accountID, self.__nodeList["nodeToSubNetwork"][self.__accountID])
+        else:
+            self.awlUpdateButtonHandler()
 
-        print("\n<----INITIALIZATION SYS---->\n")
-        print("[VoteTable]: ", self.__vote)
-        print("[All Node]:", self.__nodeList)
-        print("[AWL List]: ", self.__accountWiseLedgerList)
-        print("\n<-------------------------->\n")
+        self.printLog("INITIALIZATION SYS")
 
     def __getHostnameIP(self):
         try:
             return socket.gethostbyname(socket.gethostname())
         except:
             return None
-
-    def __send(self, outputMsg, ipPortTuple):
-        self.__socket.sendto(json.dumps(outputMsg).encode(), ipPortTuple)
-        return
 
     def __listen(self):
         inputMsg = None
@@ -122,85 +132,81 @@ class UserInterface(QtWidgets.QMainWindow, QThread):
 
         return inputMsg
 
+    def __send(self, outputMsg, ipPortTuple):
+        self.__socket.sendto(json.dumps(outputMsg).encode(), ipPortTuple)
+        return
+
+    def __broadcast(self, outputMsg, targetSubNetworkSet=None):
+        if targetSubNetworkSet is None:
+            for nodeID in self.__nodeList["all"].keys():
+                if nodeID != self.__accountID:
+                    self.__send(outputMsg, tuple(self.__nodeList["all"][nodeID]))
+        else:
+            for nodeID in self.__nodeList["all"].keys():
+                if str(self.__nodeList["nodeToSubNetwork"][nodeID]) in targetSubNetworkSet and nodeID != self.__accountID:
+                    self.__send(outputMsg, tuple(self.__nodeList["all"][nodeID]))
+
     def __updateLocal(self, inputMsg):
 
         if inputMsg["type"] == "TEST":
             print("Just a test msg")
+
         elif inputMsg["type"] == "DNS update":
             self.__nodeList = inputMsg["data"]
-
             if inputMsg["newPeer"] is not None:
                 self.__accountWiseLedgerList[inputMsg["newPeer"]] = AccountWiseLedger(inputMsg["newPeer"], inputMsg["data"]["nodeToSubNetwork"][inputMsg["newPeer"]])
                 self.__send({"type": "New Peer ACK", "senderID": self.__accountID}, tuple(self.__nodeList["all"][inputMsg["newPeer"]]))
 
-            print("\n<----Heard [DNS update]---->\n")
-            print("[VoteTable]: ", self.__vote)
-            print("[All Node]:", self.__nodeList)
-            print("[AWL List]: ", self.__accountWiseLedgerList)
-            print("\n<-------------------------->\n")
+            self.printLog("Heard [DNS update]")
 
         elif inputMsg["type"] == "Request AccountWiseLedgerList Update":
-            transferedAWLL = {}
-            for key in self.__accountWiseLedgerList:
-                transferedAWLL[key] = self.__accountWiseLedgerList[key].outputDict
-
+            transferedAWLL = {key: self.__accountWiseLedgerList[key].outputDict for key in self.__accountWiseLedgerList}
             self.__send({"type": "Send AccountWiseLedgerList", "data": transferedAWLL, "senderID": self.__accountID}, tuple(self.__nodeList["all"][inputMsg["senderID"]]))
 
-            print("\n<----Heard [Request AccountWiseLedgerList Update]---->\n")
-            print("[VoteTable]: ", self.__vote)
-            print("[All Node]:", self.__nodeList)
-            print("[AWL List]: ", self.__accountWiseLedgerList)
-            print("\n<-------------------------->\n")
+            self.printLog("Heard [Request AccountWiseLedgerList Update]")
 
         elif inputMsg["type"] == "Send AccountWiseLedgerList":
             self.__vote[json.dumps(inputMsg["data"]).encode()] += 1
 
-            wonAWLL = max(self.__vote.keys(), key=lambda x: self.__vote[x])
+            wonAWLL = max(self.__vote.keys(), key=lambda x: (self.__vote[x], len(x)))
             if self.__vote[wonAWLL] > (len(self.__nodeList["all"]) - 1) // 2:
                 self.__accountWiseLedgerList = json.loads(wonAWLL)
                 for key in self.__accountWiseLedgerList:
                     self.__accountWiseLedgerList[key] = AccountWiseLedger.createByJsonBytes(json.dumps(self.__accountWiseLedgerList[key]))
                 self.__vote = collections.Counter()
 
-            print("\n<----Heard [Send AccountWiseLedgerList]---->\n")
-            print("[VoteTable]: ", self.__vote)
-            print("[All Node]:", self.__nodeList["all"])
-            print("[AWL List]: ", self.__accountWiseLedgerList)
-            print("\n<-------------------------->\n")
+            self.printLog("Heard [Send AccountWiseLedgerList]")
+
+        elif inputMsg["type"] == "New Transaction":
+            print("Receive Task!")
+
+    def getInputFromPopUpDialog(self, questionString):
+        inputText, okPressed = QtWidgets.QInputDialog.getText(self, self.__programTitle, questionString, QtWidgets.QLineEdit.Normal, "")
+        if okPressed and inputText:
+            return inputText
 
     def dnsUpdateButtonHandler(self):
         outputMsg = {"type": "Request DNS Update", "senderID": self.__accountID}
         self.__send(outputMsg, self.__accountWiseLedgerDNS)
 
     def awlUpdateButtonHandler(self):
-        for nodeID in self.__nodeList["subNetworkToNode"][str(self.__nodeList["nodeToSubNetwork"][self.__accountID])]:
-            self.__send({"type": "Request AccountWiseLedgerList Update", "senderID": self.__accountID}, tuple(self.__nodeList["all"][nodeID]))
+        self.__broadcast({"type": "Request AccountWiseLedgerList Update", "senderID": self.__accountID}, set(self.__accountSubNetwork))
 
-    def newTransaction(self, task):
-        return self.__accountWiseLedgerList[self.__accountID].newTransaction(task)
+    def newTransactionButtonHandler(self):
+        task = {"senderID": self.__accountID}
+        task["receiverID"] = input("The receiver's name: ")
+        task["amount"] = input("The amount: ")
 
-    @staticmethod
-    def getFromURL(url):
-        b_obj = BytesIO()
-        crl = pycurl.Curl()
+        self.__accountWiseLedgerList[self.__accountID].newTransaction(task)
+        self.__broadcast({"type": "New Transaction", "data": task, "senderID": self.__accountID}, set(self.__accountSubNetwork))
 
-        crl.setopt(crl.URL, url)
-        crl.setopt(crl.WRITEDATA, b_obj)
+    def printLog(self, eventTitle):
 
-        crl.perform()
-        crl.close()
-
-        get_body = b_obj.getvalue()
-        return get_body.decode("utf8")
-
-    @staticmethod
-    def postToURL(url, msg):
-        crl = pycurl.Curl()
-        crl.setopt(crl.URL, url)
-
-        crl.setopt(crl.POSTFIELDS, urlencode(msg))
-        crl.perform()
-        crl.close()
+        print("\n<----", eventTitle, "---->\n")
+        print("[VoteTable]: ", self.__vote)
+        print("[All Node]:", self.__nodeList)
+        print("[AWL List]: ", self.__accountWiseLedgerList)
+        print("\n<-------------------------->\n")
 
 
 def main():

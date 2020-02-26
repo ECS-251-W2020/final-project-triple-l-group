@@ -38,7 +38,7 @@ def main():
             if inputMsg["senderID"] not in DNSTable["all"]:
                 newPeer = inputMsg["senderID"]
                 assignedSubNetworkIndex = min(DNSTable["sizeOfSubNetwork"].keys(), key=lambda x: DNSTable["sizeOfSubNetwork"][x])
-                DNSTable["subNetworkToNode"][assignedSubNetworkIndex][inputMsg["senderID"]] = True
+                DNSTable["subNetworkToNode"][assignedSubNetworkIndex][inputMsg["senderID"]] = len(DNSTable["subNetworkToNode"][assignedSubNetworkIndex])
                 DNSTable["nodeToSubNetwork"][inputMsg["senderID"]] = assignedSubNetworkIndex
                 DNSTable["sizeOfSubNetwork"][assignedSubNetworkIndex] += 1
             DNSTable["all"][inputMsg["senderID"]] = sourceAddress
