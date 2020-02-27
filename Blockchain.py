@@ -33,7 +33,7 @@ class Blockchain(object):
         return str(ans).replace("\'", "\"")
 
     def append(self, block):
-        if self.validBlock(block, self.__powDifficulty) and block["preHash"] == self.hash256(self.lastBlock) and (block["senderID"] == self.ownerID or block["receiverID"] == self.ownerID):
+        if self.validBlock(block, self.__powDifficulty) and block["preHash"] == self.hash256(self.viewLastBlock) and (block["senderID"] == self.viewOwnerID or block["receiverID"] == self.viewOwnerID):
             self.__chain.append(block)
             if block["senderID"] == self.__ownerID:
                 self.__balance -= block["amount"]
@@ -44,15 +44,15 @@ class Blockchain(object):
             return False
 
     @property
-    def ownerID(self):
+    def viewOwnerID(self):
         return self.__ownerID
 
     @property
-    def lastBlock(self):
+    def viewLastBlock(self):
         return self.__chain[-1]
 
     @property
-    def balance(self):
+    def viewBalance(self):
         return self.__balance
 
     @property
@@ -91,14 +91,14 @@ class Blockchain(object):
         return hashlib.sha256(block_string).hexdigest()
 
 
-def unitTest():
+def __unitTest():
     testDifficulty = 4
     testChain = Blockchain("testSender", testDifficulty)
-    testBlock = Blockchain.createNewBlock(testDifficulty, len(testChain), "testSender", "testReceiver", 500, Blockchain.hash256(testChain.lastBlock))
+    testBlock = Blockchain.createNewBlock(testDifficulty, len(testChain), "testSender", "testReceiver", 500, Blockchain.hash256(testChain.viewLastBlock))
     testChain.append(testBlock)
-    testBlock = Blockchain.createNewBlock(testDifficulty, len(testChain), "testReceiver", "testSender", 1500, Blockchain.hash256(testChain.lastBlock))
+    testBlock = Blockchain.createNewBlock(testDifficulty, len(testChain), "testReceiver", "testSender", 1500, Blockchain.hash256(testChain.viewLastBlock))
     testChain.append(testBlock)
-    testBlock = Blockchain.createNewBlock(testDifficulty, len(testChain), "testReceiver", "testSender", 3500, Blockchain.hash256(testChain.lastBlock))
+    testBlock = Blockchain.createNewBlock(testDifficulty, len(testChain), "testReceiver", "testSender", 3500, Blockchain.hash256(testChain.viewLastBlock))
     testChain.append(testBlock)
 
     print(testChain)
@@ -106,4 +106,4 @@ def unitTest():
 
 
 if __name__ == "__main__":
-    unitTest()
+    __unitTest()

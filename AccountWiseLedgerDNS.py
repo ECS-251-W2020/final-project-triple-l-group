@@ -10,8 +10,9 @@ def main():
     DNSTable = {
         "all": {},
         "nodeToSubNetwork": {},
-        "subNetworkToNode": {index: {} for index in range(K_numOfSubNetwork)},
-        "sizeOfSubNetwork": {index: 0 for index in range(K_numOfSubNetwork)}
+        "subNetworkToNode": {networkIndex: {} for networkIndex in range(K_numOfSubNetwork)},
+        "subNetworkToIndex": {networkIndex: {} for networkIndex in range(K_numOfSubNetwork)},
+        "sizeOfSubNetwork": {networkIndex: 0 for networkIndex in range(K_numOfSubNetwork)}
     }
 
     def getHostnameIP():
@@ -39,6 +40,7 @@ def main():
                 newPeer = inputMsg["senderID"]
                 assignedSubNetworkIndex = min(DNSTable["sizeOfSubNetwork"].keys(), key=lambda x: DNSTable["sizeOfSubNetwork"][x])
                 DNSTable["subNetworkToNode"][assignedSubNetworkIndex][inputMsg["senderID"]] = len(DNSTable["subNetworkToNode"][assignedSubNetworkIndex])
+                DNSTable["subNetworkToIndex"][assignedSubNetworkIndex][str(len(DNSTable["subNetworkToIndex"][assignedSubNetworkIndex]))] = inputMsg["senderID"]
                 DNSTable["nodeToSubNetwork"][inputMsg["senderID"]] = assignedSubNetworkIndex
                 DNSTable["sizeOfSubNetwork"][assignedSubNetworkIndex] += 1
             DNSTable["all"][inputMsg["senderID"]] = sourceAddress

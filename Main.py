@@ -1,4 +1,4 @@
-from AccountWiseLedger import AccountWiseLedger
+from AccountWiseLedger import *
 from urllib.parse import urlencode
 from io import BytesIO
 import pycurl
@@ -20,14 +20,14 @@ class ListenThread(QThread):
         super(ListenThread, self).__init__()
         self.__mutex = QMutex()
         self.__socket = socket
-        self.__socketBufferSize = 1024
+        self.__socketBufferSize = 102400
 
     def run(self):
         while True:
             self.__mutex.lock()
             inputMsg, sourceAddress = self.__socket.recvfrom(self.__socketBufferSize)
             inputMsg = json.loads(inputMsg)
-            print("\t<LISTEN SOCKET SIDE>: ", inputMsg)
+            # print("\t<LISTEN SOCKET SIDE>: ", inputMsg)
             self.__mutex.unlock()
 
             self.listenedMsg.emit(inputMsg)
@@ -45,7 +45,7 @@ class UserInterface(QtWidgets.QMainWindow):
 
         self.__accountID = self.getInputFromPopUpDialog("Your User Name:")
         self.__accountSubNetwork = ""
-        self.__accountWiseLedgerDNS = ("168.150.6.83", 8000)
+        self.__accountWiseLedgerDNS = ("192.168.0.29", 8000)
         self.__nodeList = {}
         self.__accountWiseLedgerList = {}
         self.__vote = collections.Counter()
@@ -72,9 +72,10 @@ class UserInterface(QtWidgets.QMainWindow):
         # Create Transactions input Field and Current Balance
         self.__userInfoLabel = QtWidgets.QLabel(self)
         self.__userInfoLabel.setText("User: " + self.__accountID)
-        self.__balanceLine = QtWidgets.QLineEdit()
-        self.__transactionLineReceiverID = QtWidgets.QLineEdit()
-        self.__transactionLineAmount = QtWidgets.QLineEdit()
+        self.__userBalance = QtWidgets.QLineEdit()
+        self.__userBalance.setEnabled(False)
+        self.__makeTransactionInputReceiverID = QtWidgets.QLineEdit()
+        self.__makeTransactionInputAmount = QtWidgets.QLineEdit()
         self.__makeTransactionButton = QtWidgets.QPushButton("Make Transaction", self)
         self.__makeTransactionButton.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
         self.__makeTransactionButton.clicked.connect(self.newTransactionButtonHandler)
@@ -98,9 +99,9 @@ class UserInterface(QtWidgets.QMainWindow):
         mainLayout = QtWidgets.QGridLayout()
         mainLayout.addWidget(self.__peersTable, 0, 0, 5, 2)
         mainLayout.addWidget(self.__userInfoLabel, 0, 2, 1, 2)
-        mainLayout.addWidget(self.__balanceLine, 1, 2, 1, 1)
-        mainLayout.addWidget(self.__transactionLineReceiverID, 2, 2, 1, 1)
-        mainLayout.addWidget(self.__transactionLineAmount, 3, 2, 1, 1)
+        mainLayout.addWidget(self.__userBalance, 1, 2, 1, 1)
+        mainLayout.addWidget(self.__makeTransactionInputReceiverID, 2, 2, 1, 1)
+        mainLayout.addWidget(self.__makeTransactionInputAmount, 3, 2, 1, 1)
         mainLayout.addWidget(self.__makeTransactionButton, 1, 3, 3, 1)
         mainLayout.addWidget(self.__logFrame, 4, 2, 1, 2)
         mainLayout.addWidget(self.__dnsUpdateButton, 5, 0, 1, 1)
@@ -118,8 +119,6 @@ class UserInterface(QtWidgets.QMainWindow):
             self.__accountWiseLedgerList[self.__accountID] = AccountWiseLedger(self.__accountID, self.__nodeList["nodeToSubNetwork"][self.__accountID])
         else:
             self.awlUpdateButtonHandler()
-
-        self.printLog("INITIALIZATION SYS", "console")
 
     def __getHostnameIP(self):
         try:
@@ -151,8 +150,8 @@ class UserInterface(QtWidgets.QMainWindow):
 
     def __updateLocal(self, inputMsg):
 
-        if inputMsg["type"] == "TEST":
-            print("Just a test msg")
+        if inputMsg["type"] == "New Peer ACK":
+            self.__print("[" + inputMsg["senderID"] + "] says hi to me")
 
         elif inputMsg["type"] == "DNS update":
             self.__nodeList = inputMsg["data"]
@@ -160,15 +159,15 @@ class UserInterface(QtWidgets.QMainWindow):
                 self.__accountWiseLedgerList[inputMsg["newPeer"]] = AccountWiseLedger(inputMsg["newPeer"], inputMsg["data"]["nodeToSubNetwork"][inputMsg["newPeer"]])
                 self.__send({"type": "New Peer ACK", "senderID": self.__accountID}, tuple(self.__nodeList["all"][inputMsg["newPeer"]]))
 
-            self.printLog("Heard [DNS update]")
+            self.printLog("<DNS> gives me new update")
 
-        elif inputMsg["type"] == "Request AccountWiseLedgerList Update":
+        elif inputMsg["type"] == "Request AWL List Update":
             transferedAWLL = {key: self.__accountWiseLedgerList[key].outputDict for key in self.__accountWiseLedgerList}
-            self.__send({"type": "Send AccountWiseLedgerList", "data": transferedAWLL, "senderID": self.__accountID}, tuple(self.__nodeList["all"][inputMsg["senderID"]]))
+            self.__send({"type": "Send AWL List", "data": transferedAWLL, "senderID": self.__accountID}, tuple(self.__nodeList["all"][inputMsg["senderID"]]))
 
-            self.printLog("Heard [Request AccountWiseLedgerList Update]")
+            self.printLog("[" + inputMsg["senderID"] + "] asks for my AWL List")
 
-        elif inputMsg["type"] == "Send AccountWiseLedgerList":
+        elif inputMsg["type"] == "Send AWL List":
             self.__vote[json.dumps(inputMsg["data"]).encode()] += 1
 
             wonAWLL = max(self.__vote.keys(), key=lambda x: (self.__vote[x], len(x)))
@@ -177,11 +176,16 @@ class UserInterface(QtWidgets.QMainWindow):
                 for key in self.__accountWiseLedgerList:
                     self.__accountWiseLedgerList[key] = AccountWiseLedger.createByJsonBytes(json.dumps(self.__accountWiseLedgerList[key]))
                 self.__vote = collections.Counter()
+                self.__userBalance.setText(str(self.__accountWiseLedgerList[self.__accountID].viewActualBalance))
 
-            self.printLog("Heard [Send AccountWiseLedgerList]")
+            self.printLog("[" + inputMsg["senderID"] + "] gives me its AWL List")
 
         elif inputMsg["type"] == "New Transaction":
-            print("Receive Task!")
+            if inputMsg["senderID"] == inputMsg["data"]["senderID"]:
+                self.__print("[" + inputMsg["senderID"] + "] gives me a new task: [" + inputMsg["data"]["senderID"] + "] >> [" + inputMsg["data"]["receiverID"] + "] with $" + str(inputMsg["data"]["amount"]))
+                self.__accountWiseLedgerList[inputMsg["senderID"]].newTransaction(inputMsg["data"])
+                self.__accountWiseLedgerList[inputMsg["senderID"]].setTransactionTaskHandler(self.__highCouncilMemberElection(inputMsg["data"]))
+                self.__print("High Council Member: " + str(self.__accountWiseLedgerList[inputMsg["senderID"]].viewTransactionTaskHandler))
 
     def __print(self, message, option="gui"):
         if option == "gui":
@@ -190,6 +194,28 @@ class UserInterface(QtWidgets.QMainWindow):
             print(message)
         else:
             print("Wrong option")
+
+    def __highCouncilMemberElection(self, task):
+        highCouncilMember, taskHashInt = {}, int(Blockchain.hash256(task), 16)
+
+        for subNetwork in self.__nodeList["subNetworkToIndex"].keys():
+            if self.__nodeList["sizeOfSubNetwork"][subNetwork] > 2:
+                designatedMember = self.__nodeList["subNetworkToIndex"][subNetwork][str(taskHashInt % len(self.__nodeList["subNetworkToIndex"][subNetwork]))]
+                if designatedMember == task["senderID"] or designatedMember == task["receiverID"]:
+                    if task["senderID"] in self.__nodeList["subNetworkToNode"][subNetwork] and task["receiverID"] in self.__nodeList["subNetworkToNode"][subNetwork]:
+                        indexDelta = abs(self.__nodeList["subNetworkToNode"][subNetwork][task["senderID"]] - self.__nodeList["subNetworkToNode"][subNetwork][task["receiverID"]])
+                        if indexDelta > 1:
+                            designatedMember = self.__nodeList["subNetworkToIndex"][subNetwork][str((taskHashInt % (indexDelta - 1) + 1 + min(self.__nodeList["subNetworkToNode"][subNetwork][task["senderID"]], self.__nodeList["subNetworkToNode"][subNetwork][task["receiverID"]])))]
+                        elif self.__nodeList["subNetworkToNode"][subNetwork][designatedMember] >= self.__nodeList["subNetworkToNode"][subNetwork][task["receiverID"]] and self.__nodeList["subNetworkToNode"][subNetwork][designatedMember] >= self.__nodeList["subNetworkToNode"][subNetwork][task["senderID"]]:
+                            designatedMember = self.__nodeList["subNetworkToIndex"][subNetwork][str(((taskHashInt - 2) % len(self.__nodeList["subNetworkToIndex"][subNetwork])))]
+                        else:
+                            designatedMember = self.__nodeList["subNetworkToIndex"][subNetwork][str(((taskHashInt + 2) % len(self.__nodeList["subNetworkToIndex"][subNetwork])))]
+                    else:
+                        designatedMember = self.__nodeList["subNetworkToIndex"][subNetwork][str(taskHashInt % (len(self.__nodeList["subNetworkToIndex"][subNetwork]) - 1))]
+
+                highCouncilMember[designatedMember] = True
+
+        return highCouncilMember
 
     def getInputFromPopUpDialog(self, questionString):
         inputText, okPressed = QtWidgets.QInputDialog.getText(self, self.__programTitle, questionString, QtWidgets.QLineEdit.Normal, "")
@@ -201,18 +227,19 @@ class UserInterface(QtWidgets.QMainWindow):
         self.__send(outputMsg, self.__accountWiseLedgerDNS)
 
     def awlUpdateButtonHandler(self):
-        self.__broadcast({"type": "Request AccountWiseLedgerList Update", "senderID": self.__accountID}, set(self.__accountSubNetwork))
+        self.__broadcast({"type": "Request AWL List Update", "senderID": self.__accountID}, set(self.__accountSubNetwork))
 
     def newTransactionButtonHandler(self):
-        task = {"senderID": self.__accountID}
-        task["receiverID"] = input("The receiver's name: ")
-        task["amount"] = input("The amount: ")
+        task = {"senderID": self.__accountID, "receiverID": self.__makeTransactionInputReceiverID.text(), "amount": int(self.__makeTransactionInputAmount.text())}
 
         self.__accountWiseLedgerList[self.__accountID].newTransaction(task)
+        self.__accountWiseLedgerList[self.__accountID].setTransactionTaskHandler(self.__highCouncilMemberElection(task))
         self.__broadcast({"type": "New Transaction", "data": task, "senderID": self.__accountID}, set(self.__accountSubNetwork))
 
+        self.__print("High Council Member: " + str(self.__accountWiseLedgerList[self.__accountID].viewTransactionTaskHandler))
+
     def printLog(self, eventTitle, option="gui"):
-        logInformation = "<----" + eventTitle + "---->\n[VoteTable]: " + str(self.__vote) + "\n[All Node]: " + str(self.__nodeList) + "\n[AWL List]: " + str(self.__accountWiseLedgerList) + "\n<-------------------------->\n"
+        logInformation = eventTitle + "\n<-------MY CURRENT DATA------->\n[VoteTable]: " + str(self.__vote) + "\n[All Node]: " + str(self.__nodeList) + "\n[AWL List]: " + str(self.__accountWiseLedgerList) + "\n<-------------END------------->\n"
         self.__print(logInformation, option)
 
 
