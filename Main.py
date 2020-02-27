@@ -45,7 +45,7 @@ class UserInterface(QtWidgets.QMainWindow):
 
         self.__accountID = self.getInputFromPopUpDialog("Your User Name:")
         self.__accountSubNetwork = ""
-        self.__accountWiseLedgerDNS = ("192.168.0.29", 8000)
+        self.__accountWiseLedgerDNS = ("192.168.43.234", 8000)
         self.__nodeList = {}
         self.__accountWiseLedgerList = {}
         self.__vote = collections.Counter()
