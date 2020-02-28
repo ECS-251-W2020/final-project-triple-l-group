@@ -9,7 +9,7 @@ class AccountWiseLedger(object):
         self.__powDifficulty = powDifficulty
         self.__transactionBalance = transactionBalance
         self.__transactionTask = json.loads(json.dumps(transactionTask)) if transactionTask else {}
-        self.__transactionTaskHandler = transactionTaskHandler
+        self.__transactionTaskHandler = json.loads(json.dumps(transactionTaskHandler)) if transactionTask else {}
 
         self.__blockchain = Blockchain.createByJsonBytes(json.dumps(blockchain)) if blockchain else Blockchain(self.__ownerID, self.__powDifficulty)
 
@@ -20,32 +20,31 @@ class AccountWiseLedger(object):
 
     def __str__(self):
         return str(self.outputDict)
+
+    def __repr__(self):
+        return str(self.outputDict)
     
     def __len__(self):
         return len(self.__blockchain)
 
-    def newTransaction(self, task):
+    def setTransaction(self, task, handlerDict):
         if (task["senderID"] == self.__ownerID and task["amount"] <= (self.__blockchain.viewBalance + self.__transactionBalance)) or task["receiverID"] == self.__ownerID:
             self.__transactionTask = task
+            self.__transactionTaskHandler = handlerDict
             self.__transactionBalance += task["amount"] if task["receiverID"] == self.__ownerID else -task["amount"]
             return True
         else:
             return False
-
-    def setTransactionTaskHandler(self, handlerDict):
-        self.__transactionTaskHandler = handlerDict
-
-    def createNewBlock(self, task):
-        return Blockchain.createNewBlock(self.__powDifficulty, Blockchain.hash256(task), task["senderID"], task["receiverID"], task["amount"], Blockchain.hash256(self.__blockchain.viewLastBlock))
+    
+    def createNewBlock(self, task, preHash):
+        return Blockchain.createNewBlock(self.__powDifficulty, Blockchain.hash256(task), task["senderID"], task["receiverID"], task["amount"], preHash)
 
     def receiveResult(self, block):
-        if self.__transactionTask["senderID"] == block["senderID"] and self.__transactionTask["receiverID"] == block["receiverID"] and self.__transactionTask["amount"] == block["amount"]:
-            appendResult = self.__blockchain.append(block)
-            if appendResult:
-                self.__transactionTask = None
-                self.__transactionTaskHandler = None
-                self.__transactionBalance += block["amount"] if block["senderID"] == self.__ownerID else -block["amount"]
-                return True
+        if self.__transactionTask["senderID"] == block["senderID"] and self.__transactionTask["receiverID"] == block["receiverID"] and self.__transactionTask["amount"] == block["amount"] and self.__blockchain.append(block):
+            self.__transactionTask = {}
+            self.__transactionTaskHandler = {}
+            self.__transactionBalance += block["amount"] if block["senderID"] == self.__ownerID else -block["amount"]
+            return True
         return False
 
     @property
@@ -55,6 +54,10 @@ class AccountWiseLedger(object):
     @property
     def viewSubNetwork(self):
         return self.__subNetwork
+
+    @property
+    def viewPowDifficulty(self):
+        return self.__powDifficulty
 
     @property
     def viewActualBalance(self):
@@ -71,6 +74,10 @@ class AccountWiseLedger(object):
     @property
     def viewTransactionTaskHandler(self):
         return self.__transactionTaskHandler
+
+    @property
+    def viewLastBlock(self):
+        return self.__blockchain.viewLastBlock
 
     @property
     def outputDict(self):
@@ -97,10 +104,9 @@ def __unitTest():
         "amount": 1500
     }
 
-    print("New Transaction Creation: ", testAccount.newTransaction(testTask))
+    print("New Transaction Creation: ", testAccount.setTransaction(testTask, {"HandlerA": True, "HandlerB": True}))
     print("Actual vs Pending Balance: ", testAccount.viewActualBalance, testAccount.viewPendingBalance)
     testBlock = testAccount.createNewBlock(testTask)
-    testAccount.setTransactionTaskHandler({"HandlerA": True, "HandlerB": True})
     print("Transaction Handler: ", testAccount.viewTransactionTaskHandler.keys())
     print("Block Append:", testAccount.receiveResult(testBlock))
     print(testAccount, testAccount.viewActualBalance, testAccount.viewPendingBalance)
@@ -111,10 +117,9 @@ def __unitTest():
         "amount": 500
     }
 
-    print("New Transaction Creation: ", testAccount.newTransaction(testTask))
+    print("New Transaction Creation: ", testAccount.setTransaction(testTask, {"HandlerA": True, "HandlerB": True}))
     print("Actual vs Pending Balance: ", testAccount.viewActualBalance, testAccount.viewPendingBalance)
     testBlock = testAccount.createNewBlock(testTask)
-    testAccount.setTransactionTaskHandler({"HandlerA": True, "HandlerB": True})
     print("Transaction Handler: ", testAccount.viewTransactionTaskHandler.keys())
     print("Block Append:", testAccount.receiveResult(testBlock))
     print(testAccount, testAccount.viewActualBalance, testAccount.viewPendingBalance)

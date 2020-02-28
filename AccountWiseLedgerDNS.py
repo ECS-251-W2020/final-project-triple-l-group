@@ -14,13 +14,8 @@ class AccountWiseLedgerDNS(object):
         self.__socketBufferSize = 102400
 
         self.__K_numOfSubNetwork = K
-        self.__DNSTable = {
-            "all": {},
-            "nodeToSubNetwork": {},
-            "subNetworkToNode": {networkIndex: {} for networkIndex in range(self.__K_numOfSubNetwork)},
-            "subNetworkToIndex": {networkIndex: {} for networkIndex in range(self.__K_numOfSubNetwork)},
-            "sizeOfSubNetwork": {networkIndex: 0 for networkIndex in range(self.__K_numOfSubNetwork)}
-        }
+        self.__DNSTable = {}
+        self.__resetDNSTable()
 
         try:
             self.__socket.bind((self.__ip, self.__port))
@@ -28,6 +23,15 @@ class AccountWiseLedgerDNS(object):
         except:
             print("Error occurred. Server shutdown...")
             return
+
+    def __resetDNSTable(self):
+        self.__DNSTable = {
+            "all": {},
+            "nodeToSubNetwork": {},
+            "subNetworkToNode": {networkIndex: {} for networkIndex in range(self.__K_numOfSubNetwork)},
+            "subNetworkToIndex": {networkIndex: {} for networkIndex in range(self.__K_numOfSubNetwork)},
+            "sizeOfSubNetwork": {networkIndex: 0 for networkIndex in range(self.__K_numOfSubNetwork)}
+        }
 
     def __getHostnameIP(self):
         try:
@@ -77,13 +81,7 @@ class AccountWiseLedgerDNS(object):
             elif inputMsg == "ls":
                 pprint(self.__DNSTable)
             elif inputMsg == "re":
-                self.__DNSTable = {
-                    "all": {},
-                    "nodeToSubNetwork": {},
-                    "subNetworkToNode": {networkIndex: {} for networkIndex in range(self.__K_numOfSubNetwork)},
-                    "subNetworkToIndex": {networkIndex: {} for networkIndex in range(self.__K_numOfSubNetwork)},
-                    "sizeOfSubNetwork": {networkIndex: 0 for networkIndex in range(self.__K_numOfSubNetwork)}
-                }
+                self.__resetDNSTable()
                 print("DNS table is cleaned up.")
             elif inputMsg == "cls":
                 os.system("cls")

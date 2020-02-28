@@ -6,6 +6,7 @@ import json
 import socket
 import sys
 import collections
+import time
 import os
 from distutils.util import strtobool
 from PyQt5 import QtWidgets, QtCore, QtGui
@@ -20,15 +21,19 @@ class ListenThread(QThread):
         super(ListenThread, self).__init__()
         self.__mutex = QMutex()
         self.__socket = socket
-        self.__socketBufferSize = 102400
+        self.__socketBufferSize = 1024000
 
     def run(self):
         while True:
-            self.__mutex.lock()
-            inputMsg, sourceAddress = self.__socket.recvfrom(self.__socketBufferSize)
-            inputMsg = json.loads(inputMsg)
-            # print("\t<LISTEN SOCKET SIDE>: ", inputMsg)
-            self.__mutex.unlock()
+            while True:
+                try:
+                    self.__mutex.lock()
+                    inputMsg, sourceAddress = self.__socket.recvfrom(self.__socketBufferSize)
+                    inputMsg = json.loads(inputMsg)
+                    self.__mutex.unlock()
+                    break
+                except:
+                    pass
 
             self.listenedMsg.emit(inputMsg)
 
@@ -45,10 +50,13 @@ class UserInterface(QtWidgets.QMainWindow):
 
         self.__accountID = self.getInputFromPopUpDialog("Your User Name:")
         self.__accountSubNetwork = ""
-        self.__accountWiseLedgerDNS = ("192.168.43.234", 8000)
+        self.__accountWiseLedgerDNS = ("192.168.0.15", 8000)
         self.__nodeList = {}
+        self.__nodeLastBlockHash = {}
         self.__accountWiseLedgerList = {}
-        self.__vote = collections.Counter()
+        self.__voteSenderBlock = collections.defaultdict(lambda: collections.defaultdict(set))
+        self.__voteReceiverBlock = collections.defaultdict(lambda: collections.defaultdict(set))
+        self.__voteAWL = collections.Counter()
 
         # Initialize the socket
         self.__socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -63,11 +71,23 @@ class UserInterface(QtWidgets.QMainWindow):
         self.__listenThread.listenedMsg.connect(self.__updateLocal)
         self.__listenThread.start()
 
+        # Initialize Last Block Hash Table
+        self.__broadcast({"type": "Request Last Block Hash", "senderID": self.__accountID}, set(self.__nodeList["all"].keys()))
+
         # Create Main Frame
         self.__centralWidget = QtWidgets.QWidget()
         self.setCentralWidget(self.__centralWidget)
         self.setGeometry(self.__windowStartPositionX, self.__windowStartPositionY, self.__windowWidth, self.__windowHeight)
         self.setWindowTitle(self.__programTitle)
+
+        # Menu Bar Actions
+        menuBarAction_View_ShowMyData = QtWidgets.QAction("Show My Data", self)
+        menuBarAction_View_ShowMyData.triggered.connect(lambda: self.printLog(""))
+
+        # Create Menu Bar
+        self.__menuBar = self.menuBar()
+        self.__menuBar_View = self.__menuBar.addMenu("&View")
+        self.__menuBar_View.addAction(menuBarAction_View_ShowMyData)
 
         # Create Transactions input Field and Current Balance
         self.__userInfoLabel = QtWidgets.QLabel(self)
@@ -78,7 +98,7 @@ class UserInterface(QtWidgets.QMainWindow):
         self.__makeTransactionInputAmount = QtWidgets.QLineEdit()
         self.__makeTransactionButton = QtWidgets.QPushButton("Make Transaction", self)
         self.__makeTransactionButton.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
-        self.__makeTransactionButton.clicked.connect(self.newTransactionButtonHandler)
+        self.__makeTransactionButton.clicked.connect(self.setTransactionButtonHandler)
 
         # Create Peers Table
         self.__peersTable = QtWidgets.QTextBrowser(self)
@@ -112,13 +132,20 @@ class UserInterface(QtWidgets.QMainWindow):
         self.show()
 
     def __initData(self):
-        self.__send({"type": "New Peer", "senderID": self.__accountID}, self.__accountWiseLedgerDNS)
-        self.__nodeList = self.__listen()["data"]
+
+        while True:
+            try:
+                self.__send({"type": "New Peer", "senderID": self.__accountID}, self.__accountWiseLedgerDNS)
+                self.__nodeList = self.__listen()["data"]
+                break
+            except:
+                pass
+
         self.__accountSubNetwork = str(self.__nodeList["nodeToSubNetwork"][self.__accountID])
         if len(self.__nodeList["subNetworkToNode"][self.__accountSubNetwork]) == 1:
             self.__accountWiseLedgerList[self.__accountID] = AccountWiseLedger(self.__accountID, self.__nodeList["nodeToSubNetwork"][self.__accountID])
-        else:
-            self.awlUpdateButtonHandler()
+            self.__nodeLastBlockHash[self.__accountID] = Blockchain.hash256(self.__accountWiseLedgerList[self.__accountID].viewLastBlock)
+        self.awlUpdateButtonHandler()
 
     def __getHostnameIP(self):
         try:
@@ -138,54 +165,113 @@ class UserInterface(QtWidgets.QMainWindow):
         self.__socket.sendto(json.dumps(outputMsg).encode(), ipPortTuple)
         return
 
-    def __broadcast(self, outputMsg, targetSubNetworkSet=None):
-        if targetSubNetworkSet is None:
+    def __broadcast(self, outputMsg, targetMemberSet=None, meInclude=False):
+        if targetMemberSet is None:
             for nodeID in self.__nodeList["all"].keys():
-                if nodeID != self.__accountID:
+                if nodeID != self.__accountID or meInclude:
                     self.__send(outputMsg, tuple(self.__nodeList["all"][nodeID]))
         else:
-            for nodeID in self.__nodeList["all"].keys():
-                if str(self.__nodeList["nodeToSubNetwork"][nodeID]) in targetSubNetworkSet and nodeID != self.__accountID:
+            for nodeID in targetMemberSet:
+                if nodeID != self.__accountID or meInclude:
                     self.__send(outputMsg, tuple(self.__nodeList["all"][nodeID]))
 
     def __updateLocal(self, inputMsg):
-
         if inputMsg["type"] == "New Peer ACK":
             self.__print("[" + inputMsg["senderID"] + "] says hi to me")
 
         elif inputMsg["type"] == "DNS update":
             self.__nodeList = inputMsg["data"]
-            if inputMsg["newPeer"] is not None:
+            if inputMsg["newPeer"] is not None and str(self.__nodeList["nodeToSubNetwork"][inputMsg["newPeer"]]) == self.__accountSubNetwork:
                 self.__accountWiseLedgerList[inputMsg["newPeer"]] = AccountWiseLedger(inputMsg["newPeer"], inputMsg["data"]["nodeToSubNetwork"][inputMsg["newPeer"]])
                 self.__send({"type": "New Peer ACK", "senderID": self.__accountID}, tuple(self.__nodeList["all"][inputMsg["newPeer"]]))
 
-            self.printLog("<DNS> gives me new update")
+            self.__print("<DNS> gives me new update")
 
         elif inputMsg["type"] == "Request AWL List Update":
             transferedAWLL = {key: self.__accountWiseLedgerList[key].outputDict for key in self.__accountWiseLedgerList}
             self.__send({"type": "Send AWL List", "data": transferedAWLL, "senderID": self.__accountID}, tuple(self.__nodeList["all"][inputMsg["senderID"]]))
-
-            self.printLog("[" + inputMsg["senderID"] + "] asks for my AWL List")
+            self.__print("[" + inputMsg["senderID"] + "] asks for my AWL List")
 
         elif inputMsg["type"] == "Send AWL List":
-            self.__vote[json.dumps(inputMsg["data"]).encode()] += 1
+            self.__voteAWL[json.dumps(inputMsg["data"]).encode()] += 1
 
-            wonAWLL = max(self.__vote.keys(), key=lambda x: (self.__vote[x], len(x)))
-            if self.__vote[wonAWLL] > (len(self.__nodeList["all"]) - 1) // 2:
+            wonAWLL = max(self.__voteAWL.keys(), key=lambda x: (self.__voteAWL[x], len(x)))
+            if self.__voteAWL[wonAWLL] > (len(self.__nodeList["subNetworkToNode"][self.__accountSubNetwork]) - 1) // 2:
                 self.__accountWiseLedgerList = json.loads(wonAWLL)
                 for key in self.__accountWiseLedgerList:
                     self.__accountWiseLedgerList[key] = AccountWiseLedger.createByJsonBytes(json.dumps(self.__accountWiseLedgerList[key]))
-                self.__vote = collections.Counter()
+                self.__voteAWL = collections.Counter()
+                self.__broadcast({"type": "Send Last Block Hash", "data": Blockchain.hash256(self.__accountWiseLedgerList[self.__accountID].viewLastBlock), "senderID": self.__accountID}, set(self.__nodeList["all"].keys()), True)
                 self.__userBalance.setText(str(self.__accountWiseLedgerList[self.__accountID].viewActualBalance))
 
-            self.printLog("[" + inputMsg["senderID"] + "] gives me its AWL List")
+            self.__print("[" + inputMsg["senderID"] + "] gives me its AWL List")
+
+        elif inputMsg["type"] == "Request Last Block Hash":
+            self.__send({"type": "Send Last Block Hash", "data": Blockchain.hash256(self.__accountWiseLedgerList[self.__accountID].viewLastBlock), "senderID": self.__accountID}, tuple(self.__nodeList["all"][inputMsg["senderID"]]))
+            self.__print("[" + inputMsg["senderID"] + "] asks for my Last Block Hash")
+
+        elif inputMsg["type"] == "Send Last Block Hash":
+            self.__nodeLastBlockHash[inputMsg["senderID"]] = inputMsg["data"]
+            self.__print("[" + inputMsg["senderID"] + "] gives me its Last Block Hash")
 
         elif inputMsg["type"] == "New Transaction":
             if inputMsg["senderID"] == inputMsg["data"]["senderID"]:
                 self.__print("[" + inputMsg["senderID"] + "] gives me a new task: [" + inputMsg["data"]["senderID"] + "] >> [" + inputMsg["data"]["receiverID"] + "] with $" + str(inputMsg["data"]["amount"]))
-                self.__accountWiseLedgerList[inputMsg["senderID"]].newTransaction(inputMsg["data"])
-                self.__accountWiseLedgerList[inputMsg["senderID"]].setTransactionTaskHandler(self.__highCouncilMemberElection(inputMsg["data"]))
+                highCouncilMemberDict = self.__highCouncilMemberElection(inputMsg["data"])
+
+                if inputMsg["data"]["senderID"] in self.__accountWiseLedgerList:
+                    self.__accountWiseLedgerList[inputMsg["data"]["senderID"]].setTransaction(inputMsg["data"], highCouncilMemberDict)
+                if inputMsg["data"]["receiverID"] in self.__accountWiseLedgerList:
+                    self.__accountWiseLedgerList[inputMsg["data"]["receiverID"]].setTransaction(inputMsg["data"], highCouncilMemberDict)
                 self.__print("High Council Member: " + str(self.__accountWiseLedgerList[inputMsg["senderID"]].viewTransactionTaskHandler))
+
+                if self.__accountID in highCouncilMemberDict:
+                    senderSideBlock = self.__accountWiseLedgerList[self.__accountID].createNewBlock(inputMsg["data"], self.__nodeLastBlockHash[inputMsg["data"]["senderID"]])
+                    receiverSideBlock = self.__accountWiseLedgerList[self.__accountID].createNewBlock(inputMsg["data"], self.__nodeLastBlockHash[inputMsg["data"]["receiverID"]])
+
+                    self.__broadcast({"type": "New Block", "data": senderSideBlock, "memo": "Sender-Side-Block", "senderID": self.__accountID}, set(self.__nodeList["subNetworkToNode"][str(self.__nodeList["nodeToSubNetwork"][inputMsg["data"]["senderID"]])].keys()), True)
+                    self.__broadcast({"type": "New Block", "data": receiverSideBlock, "memo": "Receiver-Side-Block", "senderID": self.__accountID}, set(self.__nodeList["subNetworkToNode"][str(self.__nodeList["nodeToSubNetwork"][inputMsg["data"]["receiverID"]])].keys()), True)
+
+        elif inputMsg["type"] == "New Block":
+            if inputMsg["data"]["senderID"] in self.__accountWiseLedgerList and inputMsg["memo"] == "Sender-Side-Block":
+                transactionTaskHandlerDict = self.__accountWiseLedgerList[inputMsg["data"]["senderID"]].viewTransactionTaskHandler
+                transactopnTaskPowDifficulty = self.__accountWiseLedgerList[inputMsg["data"]["senderID"]].viewPowDifficulty
+            elif inputMsg["data"]["receiverID"] in self.__accountWiseLedgerList and inputMsg["memo"] == "Receiver-Side-Block":
+                transactionTaskHandlerDict = self.__accountWiseLedgerList[inputMsg["data"]["receiverID"]].viewTransactionTaskHandler
+                transactopnTaskPowDifficulty = self.__accountWiseLedgerList[inputMsg["data"]["receiverID"]].viewPowDifficulty
+            else:
+                transactionTaskHandlerDict = {}
+                transactopnTaskPowDifficulty = 0
+
+            if inputMsg["senderID"] in transactionTaskHandlerDict and Blockchain.validBlock(inputMsg["data"], transactopnTaskPowDifficulty):
+                self.__print("[" + inputMsg["senderID"] + "] gives me a " + inputMsg["memo"] + ": [" + inputMsg["data"]["senderID"] + "] >> [" + inputMsg["data"]["receiverID"] + "] with $" + str(inputMsg["data"]["amount"]))
+
+                taskCode = json.dumps(self.__accountWiseLedgerList[inputMsg["data"]["senderID"]].viewTransactionTask if inputMsg["data"]["senderID"] in self.__accountWiseLedgerList else self.__accountWiseLedgerList[inputMsg["data"]["receiverID"]].viewTransactionTask).encode()
+                resultCode = json.dumps({"senderID": inputMsg["data"]["senderID"], "receiverID": inputMsg["data"]["receiverID"], "amount": inputMsg["data"]["amount"], "preHash": inputMsg["data"]["preHash"]}).encode()
+
+                if inputMsg["memo"] == "Sender-Side-Block" and inputMsg["data"]["senderID"] in self.__accountWiseLedgerList:
+                    self.__voteSenderBlock[taskCode][resultCode].add(json.dumps(inputMsg["data"]))
+
+                    wonSenderResult = max(self.__voteSenderBlock[taskCode].keys(), key=lambda x: len(x))
+                    if len(self.__voteSenderBlock[taskCode][wonSenderResult]) > (len(transactionTaskHandlerDict) - 1) // 2:
+                        attachedBlock = min(map(json.loads, self.__voteSenderBlock[taskCode][wonSenderResult]), key=lambda x: x["timestamp"])
+                        self.__accountWiseLedgerList[inputMsg["data"]["senderID"]].receiveResult(attachedBlock)
+                        self.__userBalance.setText(str(self.__accountWiseLedgerList[self.__accountID].viewActualBalance))
+                        if inputMsg["data"]["senderID"] == self.__accountID:
+                            self.__broadcast({"type": "Send Last Block Hash", "data": Blockchain.hash256(self.__accountWiseLedgerList[self.__accountID].viewLastBlock), "senderID": self.__accountID}, self.__nodeList["all"].keys(), True)
+                        del self.__voteSenderBlock[taskCode]
+
+                if inputMsg["memo"] == "Receiver-Side-Block" and inputMsg["data"]["receiverID"] in self.__accountWiseLedgerList:
+                    self.__voteReceiverBlock[taskCode][resultCode].add(json.dumps(inputMsg["data"]))
+
+                    wonReceiverResult = max(self.__voteReceiverBlock[taskCode].keys(), key=lambda x: len(x))
+                    if len(self.__voteReceiverBlock[taskCode][wonReceiverResult]) > (len(transactionTaskHandlerDict) - 1) // 2:
+                        attachedBlock = min(map(json.loads, self.__voteReceiverBlock[taskCode][wonReceiverResult]), key=lambda x: x["timestamp"])
+                        self.__accountWiseLedgerList[inputMsg["data"]["receiverID"]].receiveResult(attachedBlock)
+                        self.__userBalance.setText(str(self.__accountWiseLedgerList[self.__accountID].viewActualBalance))
+                        if inputMsg["data"]["receiverID"] == self.__accountID:
+                            self.__broadcast({"type": "Send Last Block Hash", "data": Blockchain.hash256(self.__accountWiseLedgerList[self.__accountID].viewLastBlock), "senderID": self.__accountID}, self.__nodeList["all"].keys(), True)
+                        del self.__voteReceiverBlock[taskCode]
 
     def __print(self, message, option="gui"):
         if option == "gui":
@@ -227,19 +313,25 @@ class UserInterface(QtWidgets.QMainWindow):
         self.__send(outputMsg, self.__accountWiseLedgerDNS)
 
     def awlUpdateButtonHandler(self):
-        self.__broadcast({"type": "Request AWL List Update", "senderID": self.__accountID}, set(self.__accountSubNetwork))
+        self.__broadcast({"type": "Request AWL List Update", "senderID": self.__accountID}, set(self.__nodeList["subNetworkToNode"][self.__accountSubNetwork].keys()))
 
-    def newTransactionButtonHandler(self):
+    def setTransactionButtonHandler(self):
         task = {"senderID": self.__accountID, "receiverID": self.__makeTransactionInputReceiverID.text(), "amount": int(self.__makeTransactionInputAmount.text())}
 
-        self.__accountWiseLedgerList[self.__accountID].newTransaction(task)
-        self.__accountWiseLedgerList[self.__accountID].setTransactionTaskHandler(self.__highCouncilMemberElection(task))
-        self.__broadcast({"type": "New Transaction", "data": task, "senderID": self.__accountID}, set(self.__accountSubNetwork))
-
-        self.__print("High Council Member: " + str(self.__accountWiseLedgerList[self.__accountID].viewTransactionTaskHandler))
+        broadcastSubNetworkIndex = {self.__accountSubNetwork, str(self.__nodeList["nodeToSubNetwork"][task["receiverID"]])}
+        for subNetworkIndex in broadcastSubNetworkIndex:
+            self.__broadcast({"type": "New Transaction", "data": task, "senderID": self.__accountID}, set(self.__nodeList["subNetworkToNode"][subNetworkIndex].keys()), True)
 
     def printLog(self, eventTitle, option="gui"):
-        logInformation = eventTitle + "\n<-------MY CURRENT DATA------->\n[VoteTable]: " + str(self.__vote) + "\n[All Node]: " + str(self.__nodeList) + "\n[AWL List]: " + str(self.__accountWiseLedgerList) + "\n<-------------END------------->\n"
+        logInformation = eventTitle + \
+                         "\n<-------MY CURRENT DATA------->" \
+                         "\n[Vote AWL]: " + str(self.__voteAWL) + \
+                         "\n[Vot SBLK]: " + str(self.__voteSenderBlock) + \
+                         "\n[Vot RBLK]: " + str(self.__voteReceiverBlock) + \
+                         "\n[LST HASH]: " + str(self.__nodeLastBlockHash) + \
+                         "\n[All Node]: " + str(self.__nodeList) + \
+                         "\n[AWL List]: " + str(self.__accountWiseLedgerList) + \
+                         "\n<-------------END------------->\n"
         self.__print(logInformation, option)
 
 
