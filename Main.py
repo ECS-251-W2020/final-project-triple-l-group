@@ -50,7 +50,7 @@ class UserInterface(QtWidgets.QMainWindow):
 
         self.__accountID = self.getInputFromPopUpDialog("Your User Name:")
         self.__accountSubNetwork = ""
-        self.__accountWiseLedgerDNS = ("168.150.103.70", 8000)
+        self.__accountWiseLedgerDNS = ("168.150.30.22", 8000)
         self.__nodeList = {}
         self.__nodeLastBlockHash = {}
         self.__accountWiseLedgerList = {}
@@ -132,7 +132,6 @@ class UserInterface(QtWidgets.QMainWindow):
         self.show()
 
     def __initData(self):
-
         while True:
             try:
                 self.__send({"type": "New Peer", "senderID": self.__accountID}, self.__accountWiseLedgerDNS)
@@ -145,6 +144,7 @@ class UserInterface(QtWidgets.QMainWindow):
         if len(self.__nodeList["subNetworkToNode"][self.__accountSubNetwork]) == 1:
             self.__accountWiseLedgerList[self.__accountID] = AccountWiseLedger(self.__accountID, self.__nodeList["nodeToSubNetwork"][self.__accountID])
             self.__nodeLastBlockHash[self.__accountID] = Blockchain.hash256(self.__accountWiseLedgerList[self.__accountID].viewLastBlock)
+            self.__broadcast({"type": "Send Last Block Hash", "data": Blockchain.hash256(self.__accountWiseLedgerList[self.__accountID].viewLastBlock), "senderID": self.__accountID}, set(self.__nodeList["all"].keys()), True)
         self.awlUpdateButtonHandler()
 
     def __getHostnameIP(self):
@@ -223,7 +223,7 @@ class UserInterface(QtWidgets.QMainWindow):
                     self.__accountWiseLedgerList[inputMsg["data"]["senderID"]].setTransaction(inputMsg["data"], highCouncilMemberDict)
                 if inputMsg["data"]["receiverID"] in self.__accountWiseLedgerList:
                     self.__accountWiseLedgerList[inputMsg["data"]["receiverID"]].setTransaction(inputMsg["data"], highCouncilMemberDict)
-                self.__print("High Council Member: " + str(self.__accountWiseLedgerList[inputMsg["senderID"]].viewTransactionTaskHandler))
+                self.__print("High Council Member: " + str(set(highCouncilMemberDict.keys())))
 
                 if self.__accountID in highCouncilMemberDict:
                     senderSideBlock = self.__accountWiseLedgerList[self.__accountID].createNewBlock(inputMsg["data"], self.__nodeLastBlockHash[inputMsg["data"]["senderID"]])
