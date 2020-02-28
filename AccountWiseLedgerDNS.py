@@ -11,7 +11,7 @@ class AccountWiseLedgerDNS(object):
         self.__socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.__ip = self.__getHostnameIP()
         self.__port = 8000
-        self.__socketBufferSize = 102400
+        self.__socketBufferSize = 64 * 1024 * 1024
 
         self.__K_numOfSubNetwork = K
         self.__DNSTable = {}
@@ -85,20 +85,31 @@ class AccountWiseLedgerDNS(object):
                 print("DNS table is cleaned up.")
             elif inputMsg == "cls":
                 os.system("cls")
+            elif inputMsg == "ipconfig":
+                print("Current Local Administrator: ", socket.gethostname())
+                print("IP Address: ", self.__ip)
+                print("Port Number: ", self.__port)
+                print("Socket Buffer Size: ", self.__socketBufferSize)
+                print("Designated number of Sub-Networks: ", self.__K_numOfSubNetwork)
             elif inputMsg == "man":
+                manual = {
+                    "ls": "List down the current DNS table",
+                    "re": "Clean up the DNS table",
+                    "cls": "Clean up the console out",
+                    "ipconfig": "Show all network settings",
+                    "man": "Show all available commands",
+                    "exit": "Shutdown the DNS"
+                }
+
                 print("The following commands are available:")
-                print("1. ls:\t\ttList down the current DNS table")
-                print("2. re:\t\tClean up the DNS table")
-                print("3. cls:\t\tClean up the console out")
-                print("4. man:\t\tShow all available commands")
-                print("5. exit:\tShutdown the DNS")
+                for index, item in enumerate(manual):
+                    print(index, ". ", item, "\t", manual[item])
             else:
                 print("Unknown command.")
 
 
 def main():
-    K_numOfSubNetwork = 1
-
+    K_numOfSubNetwork = int(input("The number of Sub-Network K (default = 1): ") or 1)
     myDNS = AccountWiseLedgerDNS(K_numOfSubNetwork)
     
     threadListen = threading.Thread(target=myDNS.listen, args=())

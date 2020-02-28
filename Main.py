@@ -6,7 +6,7 @@ import json
 import socket
 import sys
 import collections
-import time
+from time import time
 import os
 from distutils.util import strtobool
 from PyQt5 import QtWidgets, QtCore, QtGui
@@ -21,7 +21,7 @@ class ListenThread(QThread):
         super(ListenThread, self).__init__()
         self.__mutex = QMutex()
         self.__socket = socket
-        self.__socketBufferSize = 1024000
+        self.__socketBufferSize = 64 * 1024 * 1024
 
     def run(self):
         while True:
@@ -50,7 +50,7 @@ class UserInterface(QtWidgets.QMainWindow):
 
         self.__accountID = self.getInputFromPopUpDialog("Your User Name:")
         self.__accountSubNetwork = ""
-        self.__accountWiseLedgerDNS = ("192.168.0.15", 8000)
+        self.__accountWiseLedgerDNS = ("168.150.103.70", 8000)
         self.__nodeList = {}
         self.__nodeLastBlockHash = {}
         self.__accountWiseLedgerList = {}
@@ -316,7 +316,7 @@ class UserInterface(QtWidgets.QMainWindow):
         self.__broadcast({"type": "Request AWL List Update", "senderID": self.__accountID}, set(self.__nodeList["subNetworkToNode"][self.__accountSubNetwork].keys()))
 
     def setTransactionButtonHandler(self):
-        task = {"senderID": self.__accountID, "receiverID": self.__makeTransactionInputReceiverID.text(), "amount": int(self.__makeTransactionInputAmount.text())}
+        task = {"senderID": self.__accountID, "receiverID": self.__makeTransactionInputReceiverID.text(), "amount": int(self.__makeTransactionInputAmount.text()), "timestamp": time()}
 
         broadcastSubNetworkIndex = {self.__accountSubNetwork, str(self.__nodeList["nodeToSubNetwork"][task["receiverID"]])}
         for subNetworkIndex in broadcastSubNetworkIndex:
