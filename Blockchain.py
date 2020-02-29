@@ -64,16 +64,20 @@ class Blockchain(object):
         return json.dumps(self.outputDict).encode()
 
     @staticmethod
-    def createNewBlock(powDifficulty, taskID, senderID, receiverID, amount, preHash):
+    def createNewBlock(powDifficulty, taskID, senderID, receiverID, amount, preHash, taskAbortSignal=False):
         block = {
             "taskID": taskID,
             "timestamp": time(),
             "senderID": senderID,
             "receiverID": receiverID,
             "amount": amount,
+            "msg": "None",
             "nonce": 0,
             "preHash": preHash
         }
+
+        if taskAbortSignal:
+            block["msg"] = "Task Abort"
 
         powThreshold = "0" * powDifficulty
         while Blockchain.hash256(block)[:powDifficulty] != powThreshold:

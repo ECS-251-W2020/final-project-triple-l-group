@@ -28,7 +28,7 @@ class AccountWiseLedger(object):
         return len(self.__blockchain)
 
     def setTransaction(self, task, handlerDict):
-        if (task["senderID"] == self.__ownerID and task["amount"] <= (self.__blockchain.viewBalance + self.__transactionBalance)) or task["receiverID"] == self.__ownerID:
+        if task["senderID"] == self.__ownerID or task["receiverID"] == self.__ownerID:
             self.__transactionTask = task
             self.__transactionTaskHandler = handlerDict
             self.__transactionBalance += task["amount"] if task["receiverID"] == self.__ownerID else -task["amount"]
@@ -36,15 +36,22 @@ class AccountWiseLedger(object):
         else:
             return False
     
-    def createNewBlock(self, task, preHash):
-        return Blockchain.createNewBlock(self.__powDifficulty, Blockchain.hash256(task), task["senderID"], task["receiverID"], task["amount"], preHash)
+    def createNewBlock(self, task, preHash, taskAbortSignal=False):
+        return Blockchain.createNewBlock(self.__powDifficulty, Blockchain.hash256(task), task["senderID"], task["receiverID"], task["amount"], preHash, taskAbortSignal)
 
     def receiveResult(self, block):
-        if self.__transactionTask["senderID"] == block["senderID"] and self.__transactionTask["receiverID"] == block["receiverID"] and self.__transactionTask["amount"] == block["amount"] and self.__blockchain.append(block):
+        if block["msg"] == "Task Abort":
+            self.__transactionTask = {}
+            self.__transactionTaskHandler = {}
+            self.__transactionBalance += block["amount"] if block["senderID"] == self.__ownerID else -block["amount"]
+            return False
+
+        elif self.__transactionTask["senderID"] == block["senderID"] and self.__transactionTask["receiverID"] == block["receiverID"] and self.__transactionTask["amount"] == block["amount"] and self.__blockchain.append(block):
             self.__transactionTask = {}
             self.__transactionTaskHandler = {}
             self.__transactionBalance += block["amount"] if block["senderID"] == self.__ownerID else -block["amount"]
             return True
+
         return False
 
     @property
@@ -66,6 +73,10 @@ class AccountWiseLedger(object):
     @property
     def viewPendingBalance(self):
         return self.__transactionBalance
+
+    @property
+    def viewPlanningBalance(self):
+        return self.__transactionBalance + self.__blockchain.viewBalance
 
     @property
     def viewTransactionTask(self):
@@ -105,8 +116,8 @@ def __unitTest():
     }
 
     print("New Transaction Creation: ", testAccount.setTransaction(testTask, {"HandlerA": True, "HandlerB": True}))
-    print("Actual vs Pending Balance: ", testAccount.viewActualBalance, testAccount.viewPendingBalance)
-    testBlock = testAccount.createNewBlock(testTask)
+    print("Actual, Pending, Planning Balance: ", testAccount.viewActualBalance, testAccount.viewPendingBalance, testAccount.viewPlanningBalance)
+    testBlock = testAccount.createNewBlock(testTask, Blockchain.hash256(testAccount.viewLastBlock))
     print("Transaction Handler: ", testAccount.viewTransactionTaskHandler.keys())
     print("Block Append:", testAccount.receiveResult(testBlock))
     print(testAccount, testAccount.viewActualBalance, testAccount.viewPendingBalance)
@@ -118,8 +129,8 @@ def __unitTest():
     }
 
     print("New Transaction Creation: ", testAccount.setTransaction(testTask, {"HandlerA": True, "HandlerB": True}))
-    print("Actual vs Pending Balance: ", testAccount.viewActualBalance, testAccount.viewPendingBalance)
-    testBlock = testAccount.createNewBlock(testTask)
+    print("Actual, Pending, Planning Balance: ", testAccount.viewActualBalance, testAccount.viewPendingBalance, testAccount.viewPlanningBalance)
+    testBlock = testAccount.createNewBlock(testTask, Blockchain.hash256(testAccount.viewLastBlock))
     print("Transaction Handler: ", testAccount.viewTransactionTaskHandler.keys())
     print("Block Append:", testAccount.receiveResult(testBlock))
     print(testAccount, testAccount.viewActualBalance, testAccount.viewPendingBalance)

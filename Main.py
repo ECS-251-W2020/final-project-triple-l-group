@@ -50,12 +50,13 @@ class UserInterface(QtWidgets.QMainWindow):
 
         self.__accountID = self.getInputFromPopUpDialog("Your User Name:")
         self.__accountSubNetwork = ""
-        self.__accountWiseLedgerDNS = ("168.150.30.22", 8000)
+        self.__accountWiseLedgerDNS = ("192.168.0.29", 8000)
         self.__nodeList = {}
         self.__nodeLastBlockHash = {}
         self.__accountWiseLedgerList = {}
         self.__voteSenderBlock = collections.defaultdict(lambda: collections.defaultdict(set))
         self.__voteReceiverBlock = collections.defaultdict(lambda: collections.defaultdict(set))
+        self.__voteValidTransaction = collections.defaultdict(lambda: collections.Counter())
         self.__voteAWL = collections.Counter()
 
         # Initialize the socket
@@ -65,7 +66,7 @@ class UserInterface(QtWidgets.QMainWindow):
         # Initialize data
         self.__initData()
 
-        # Multi-Threading for Listening
+        # Initialize Multi-Threading for Listening
         self.__mutex = QMutex()
         self.__listenThread = ListenThread(self.__socket)
         self.__listenThread.listenedMsg.connect(self.__updateLocal)
@@ -91,7 +92,7 @@ class UserInterface(QtWidgets.QMainWindow):
 
         # Create Transactions input Field and Current Balance
         self.__userInfoLabel = QtWidgets.QLabel(self)
-        self.__userInfoLabel.setText("User: " + self.__accountID)
+        self.__userInfoLabel.setText("User: " + self.__accountID + "\t Sub-Network Index: " + self.__accountSubNetwork)
         self.__userBalance = QtWidgets.QLineEdit()
         self.__userBalance.setEnabled(False)
         self.__makeTransactionInputReceiverID = QtWidgets.QLineEdit()
@@ -226,11 +227,37 @@ class UserInterface(QtWidgets.QMainWindow):
                 self.__print("High Council Member: " + str(set(highCouncilMemberDict.keys())))
 
                 if self.__accountID in highCouncilMemberDict:
+                    self.__broadcast({"type": "Check Valid Transaction", "target": inputMsg["data"]["senderID"], "data": inputMsg["data"], "senderID": self.__accountID}, set(self.__nodeList["subNetworkToNode"][str(self.__nodeList["nodeToSubNetwork"][inputMsg["senderID"]])].keys()), True)
+
+        elif inputMsg["type"] == "Check Valid Transaction":
+            if str(self.__nodeList["nodeToSubNetwork"][inputMsg["target"]]) == self.__accountSubNetwork:
+                if self.__accountWiseLedgerList[inputMsg["target"]].viewPlanningBalance >= 0:
+                    self.__send({"type": "Ans Valid Transaction", "target": inputMsg["target"], "data": inputMsg["data"], "ans": "True", "senderID": self.__accountID}, tuple(self.__nodeList["all"][inputMsg["senderID"]]))
+                    self.__print("[" + inputMsg["senderID"] + "] asks me the validity of: " + str(self.__accountWiseLedgerList[inputMsg["target"]].viewTransactionTask) + ". I said True")
+                else:
+                    self.__send({"type": "Ans Valid Transaction", "target": inputMsg["target"], "data": inputMsg["data"], "ans": "False", "senderID": self.__accountID}, tuple(self.__nodeList["all"][inputMsg["senderID"]]))
+                    self.__print("[" + inputMsg["senderID"] + "] asks me the validity of: " + str(self.__accountWiseLedgerList[inputMsg["target"]].viewTransactionTask) + ". I said False")
+
+        elif inputMsg["type"] == "Ans Valid Transaction":
+            self.__voteValidTransaction[inputMsg["target"]][inputMsg["ans"]] += 1
+            wonValidTransactionResult = max(self.__voteValidTransaction[inputMsg["target"]].keys(), key=lambda x: self.__voteValidTransaction[inputMsg["target"]][x])
+
+            if self.__voteValidTransaction[inputMsg["target"]][wonValidTransactionResult] > (self.__nodeList["sizeOfSubNetwork"][self.__accountSubNetwork] - 1) // 2:
+                if wonValidTransactionResult == "True":
                     senderSideBlock = self.__accountWiseLedgerList[self.__accountID].createNewBlock(inputMsg["data"], self.__nodeLastBlockHash[inputMsg["data"]["senderID"]])
                     receiverSideBlock = self.__accountWiseLedgerList[self.__accountID].createNewBlock(inputMsg["data"], self.__nodeLastBlockHash[inputMsg["data"]["receiverID"]])
 
                     self.__broadcast({"type": "New Block", "data": senderSideBlock, "memo": "Sender-Side-Block", "senderID": self.__accountID}, set(self.__nodeList["subNetworkToNode"][str(self.__nodeList["nodeToSubNetwork"][inputMsg["data"]["senderID"]])].keys()), True)
                     self.__broadcast({"type": "New Block", "data": receiverSideBlock, "memo": "Receiver-Side-Block", "senderID": self.__accountID}, set(self.__nodeList["subNetworkToNode"][str(self.__nodeList["nodeToSubNetwork"][inputMsg["data"]["receiverID"]])].keys()), True)
+                    self.__print("<Sub-Network " + str(self.__nodeList["nodeToSubNetwork"][inputMsg["target"]]) + "> told me the transaction is valid.")
+                else:
+                    taskAbortSenderBlock = self.__accountWiseLedgerList[self.__accountID].createNewBlock(inputMsg["data"], self.__nodeLastBlockHash[inputMsg["data"]["senderID"]], taskAbortSignal=True)
+                    taskAbortReceiverBlock = self.__accountWiseLedgerList[self.__accountID].createNewBlock(inputMsg["data"], self.__nodeLastBlockHash[inputMsg["data"]["receiverID"]], taskAbortSignal=True)
+                    self.__broadcast({"type": "New Block", "data": taskAbortSenderBlock, "memo": "Sender-Side-Block", "senderID": self.__accountID}, set(self.__nodeList["subNetworkToNode"][str(self.__nodeList["nodeToSubNetwork"][inputMsg["data"]["senderID"]])].keys()), True)
+                    self.__broadcast({"type": "New Block", "data": taskAbortReceiverBlock, "memo": "Receiver-Side-Block", "senderID": self.__accountID}, set(self.__nodeList["subNetworkToNode"][str(self.__nodeList["nodeToSubNetwork"][inputMsg["data"]["receiverID"]])].keys()), True)
+                    self.__print("<Sub-Network " + str(self.__nodeList["nodeToSubNetwork"][inputMsg["target"]]) + "> told me the transaction is invalid.")
+
+                del self.__voteValidTransaction[inputMsg["target"]]
 
         elif inputMsg["type"] == "New Block":
             if inputMsg["data"]["senderID"] in self.__accountWiseLedgerList and inputMsg["memo"] == "Sender-Side-Block":
@@ -255,10 +282,12 @@ class UserInterface(QtWidgets.QMainWindow):
                     wonSenderResult = max(self.__voteSenderBlock[taskCode].keys(), key=lambda x: len(x))
                     if len(self.__voteSenderBlock[taskCode][wonSenderResult]) > (len(transactionTaskHandlerDict) - 1) // 2:
                         attachedBlock = min(map(json.loads, self.__voteSenderBlock[taskCode][wonSenderResult]), key=lambda x: x["timestamp"])
-                        self.__accountWiseLedgerList[inputMsg["data"]["senderID"]].receiveResult(attachedBlock)
-                        self.__userBalance.setText(str(self.__accountWiseLedgerList[self.__accountID].viewActualBalance))
-                        if inputMsg["data"]["senderID"] == self.__accountID:
-                            self.__broadcast({"type": "Send Last Block Hash", "data": Blockchain.hash256(self.__accountWiseLedgerList[self.__accountID].viewLastBlock), "senderID": self.__accountID}, self.__nodeList["all"].keys(), True)
+                        if self.__accountWiseLedgerList[inputMsg["data"]["senderID"]].receiveResult(attachedBlock):
+                            if inputMsg["data"]["senderID"] == self.__accountID:
+                                self.__userBalance.setText(str(self.__accountWiseLedgerList[self.__accountID].viewActualBalance))
+                                self.__broadcast({"type": "Send Last Block Hash", "data": Blockchain.hash256(self.__accountWiseLedgerList[self.__accountID].viewLastBlock), "senderID": self.__accountID}, self.__nodeList["all"].keys(), True)
+                        else:
+                            self.__print("<High Council> told me this task is invalid. Therefore, task abort")
                         del self.__voteSenderBlock[taskCode]
 
                 if inputMsg["memo"] == "Receiver-Side-Block" and inputMsg["data"]["receiverID"] in self.__accountWiseLedgerList:
@@ -267,10 +296,12 @@ class UserInterface(QtWidgets.QMainWindow):
                     wonReceiverResult = max(self.__voteReceiverBlock[taskCode].keys(), key=lambda x: len(x))
                     if len(self.__voteReceiverBlock[taskCode][wonReceiverResult]) > (len(transactionTaskHandlerDict) - 1) // 2:
                         attachedBlock = min(map(json.loads, self.__voteReceiverBlock[taskCode][wonReceiverResult]), key=lambda x: x["timestamp"])
-                        self.__accountWiseLedgerList[inputMsg["data"]["receiverID"]].receiveResult(attachedBlock)
-                        self.__userBalance.setText(str(self.__accountWiseLedgerList[self.__accountID].viewActualBalance))
-                        if inputMsg["data"]["receiverID"] == self.__accountID:
-                            self.__broadcast({"type": "Send Last Block Hash", "data": Blockchain.hash256(self.__accountWiseLedgerList[self.__accountID].viewLastBlock), "senderID": self.__accountID}, self.__nodeList["all"].keys(), True)
+                        if self.__accountWiseLedgerList[inputMsg["data"]["receiverID"]].receiveResult(attachedBlock):
+                            if inputMsg["data"]["receiverID"] == self.__accountID:
+                                self.__userBalance.setText(str(self.__accountWiseLedgerList[self.__accountID].viewActualBalance))
+                                self.__broadcast({"type": "Send Last Block Hash", "data": Blockchain.hash256(self.__accountWiseLedgerList[self.__accountID].viewLastBlock), "senderID": self.__accountID}, self.__nodeList["all"].keys(), True)
+                        else:
+                            self.__print("<High Council> told me this task is invalid. Therefore, task abort")
                         del self.__voteReceiverBlock[taskCode]
 
     def __print(self, message, option="gui"):
@@ -316,11 +347,35 @@ class UserInterface(QtWidgets.QMainWindow):
         self.__broadcast({"type": "Request AWL List Update", "senderID": self.__accountID}, set(self.__nodeList["subNetworkToNode"][self.__accountSubNetwork].keys()))
 
     def setTransactionButtonHandler(self):
-        task = {"senderID": self.__accountID, "receiverID": self.__makeTransactionInputReceiverID.text(), "amount": int(self.__makeTransactionInputAmount.text()), "timestamp": time()}
+        try:
+            if self.__nodeList["sizeOfSubNetwork"][self.__accountSubNetwork] < 3:
+                QtWidgets.QMessageBox.warning(self, self.__programTitle, "There are less than 3 peers in your Sub-Network. Transactions are not allowed for now.", QtWidgets.QMessageBox.Ok)
+                self.__makeTransactionInputAmount.setText("")
+                self.__makeTransactionInputReceiverID.setText("")
+            elif int(self.__makeTransactionInputAmount.text()) > 0 and self.__makeTransactionInputReceiverID.text() != self.__accountID:
+                task = {"senderID": self.__accountID, "receiverID": self.__makeTransactionInputReceiverID.text(), "amount": int(self.__makeTransactionInputAmount.text()), "timestamp": time()}
 
-        broadcastSubNetworkIndex = {self.__accountSubNetwork, str(self.__nodeList["nodeToSubNetwork"][task["receiverID"]])}
-        for subNetworkIndex in broadcastSubNetworkIndex:
-            self.__broadcast({"type": "New Transaction", "data": task, "senderID": self.__accountID}, set(self.__nodeList["subNetworkToNode"][subNetworkIndex].keys()), True)
+                broadcastSubNetworkIndex = {self.__accountSubNetwork, str(self.__nodeList["nodeToSubNetwork"][task["receiverID"]])}
+                for subNetworkIndex in broadcastSubNetworkIndex:
+                    self.__broadcast({"type": "New Transaction", "data": task, "senderID": self.__accountID}, set(self.__nodeList["subNetworkToNode"][subNetworkIndex].keys()), True)
+            elif self.__makeTransactionInputReceiverID.text() == self.__accountID:
+                QtWidgets.QMessageBox.warning(self, self.__programTitle, "Transferring amount to yourself is not allowed.", QtWidgets.QMessageBox.Ok)
+                self.__makeTransactionInputAmount.setText("")
+                self.__makeTransactionInputReceiverID.setText("")
+            else:
+                QtWidgets.QMessageBox.warning(self, self.__programTitle, "Negative or Null amount is not allowed.", QtWidgets.QMessageBox.Ok)
+                self.__makeTransactionInputAmount.setText("")
+                self.__makeTransactionInputReceiverID.setText("")
+
+        except KeyError:
+            QtWidgets.QMessageBox.warning(self, self.__programTitle, "The receiver does not exist.", QtWidgets.QMessageBox.Ok)
+            self.__makeTransactionInputAmount.setText("")
+            self.__makeTransactionInputReceiverID.setText("")
+
+        except ValueError:
+            QtWidgets.QMessageBox.warning(self, self.__programTitle, "Please insert valid number.", QtWidgets.QMessageBox.Ok)
+            self.__makeTransactionInputAmount.setText("")
+            self.__makeTransactionInputReceiverID.setText("")
 
     def printLog(self, eventTitle, option="gui"):
         logInformation = eventTitle + \

@@ -85,7 +85,13 @@ class AccountWiseLedgerDNS(object):
                 print("DNS table is cleaned up.")
             elif inputMsg == "cls":
                 os.system("cls")
-            elif inputMsg == "ipconfig":
+            elif inputMsg[:4] == "setk":
+                try:
+                    self.__K_numOfSubNetwork = int(inputMsg.split(" ")[1])
+                    self.__resetDNSTable()
+                except (IndexError, ValueError):
+                    print("Please insert a valid number.")
+            elif inputMsg == "cfg":
                 print("Current Local Administrator: ", socket.gethostname())
                 print("IP Address: ", self.__ip)
                 print("Port Number: ", self.__port)
@@ -96,7 +102,8 @@ class AccountWiseLedgerDNS(object):
                     "ls": "List down the current DNS table",
                     "re": "Clean up the DNS table",
                     "cls": "Clean up the console out",
-                    "ipconfig": "Show all network settings",
+                    "setk": "Re-define the number of Sub-Networks",
+                    "cfg": "Show all network settings",
                     "man": "Show all available commands",
                     "exit": "Shutdown the DNS"
                 }
@@ -109,7 +116,7 @@ class AccountWiseLedgerDNS(object):
 
 
 def main():
-    K_numOfSubNetwork = int(input("The number of Sub-Network K (default = 1): ") or 1)
+    K_numOfSubNetwork = int(input("The number of Sub-Networks K (default = 1): ") or 1)
     myDNS = AccountWiseLedgerDNS(K_numOfSubNetwork)
     
     threadListen = threading.Thread(target=myDNS.listen, args=())
