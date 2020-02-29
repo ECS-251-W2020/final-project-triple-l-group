@@ -94,7 +94,12 @@ class UserInterface(QtWidgets.QMainWindow):
         self.__userInfoLabel = QtWidgets.QLabel(self)
         self.__userInfoLabel.setText("User: " + self.__accountID + "\t Sub-Network Index: " + self.__accountSubNetwork)
         self.__userBalance = QtWidgets.QLineEdit()
-        self.__userBalance.setEnabled(False)
+        try:
+            self.__userBalance.setText(str(self.__accountWiseLedgerList[self.__accountID].viewActualBalance))
+        except KeyError:
+            pass
+        finally:
+            self.__userBalance.setEnabled(False)
         self.__makeTransactionInputReceiverID = QtWidgets.QLineEdit()
         self.__makeTransactionInputAmount = QtWidgets.QLineEdit()
         self.__makeTransactionButton = QtWidgets.QPushButton("Make Transaction", self)
@@ -231,12 +236,12 @@ class UserInterface(QtWidgets.QMainWindow):
 
         elif inputMsg["type"] == "Check Valid Transaction":
             if str(self.__nodeList["nodeToSubNetwork"][inputMsg["target"]]) == self.__accountSubNetwork:
-                if self.__accountWiseLedgerList[inputMsg["target"]].viewPlanningBalance >= 0:
+                if self.__accountWiseLedgerList[inputMsg["target"]].viewPlanningBalance >= 0 and inputMsg["data"]["amount"] > 0:
                     self.__send({"type": "Ans Valid Transaction", "target": inputMsg["target"], "data": inputMsg["data"], "ans": "True", "senderID": self.__accountID}, tuple(self.__nodeList["all"][inputMsg["senderID"]]))
-                    self.__print("[" + inputMsg["senderID"] + "] asks me the validity of: " + str(self.__accountWiseLedgerList[inputMsg["target"]].viewTransactionTask) + ". I said True")
+                    self.__print("[" + inputMsg["senderID"] + "] asks me the validity of: [" + inputMsg["data"]["senderID"] + "] >> [" + inputMsg["data"]["receiverID"] + "] with $" + str(inputMsg["data"]["amount"]) + ". I said Yes")
                 else:
                     self.__send({"type": "Ans Valid Transaction", "target": inputMsg["target"], "data": inputMsg["data"], "ans": "False", "senderID": self.__accountID}, tuple(self.__nodeList["all"][inputMsg["senderID"]]))
-                    self.__print("[" + inputMsg["senderID"] + "] asks me the validity of: " + str(self.__accountWiseLedgerList[inputMsg["target"]].viewTransactionTask) + ". I said False")
+                    self.__print("[" + inputMsg["senderID"] + "] asks me the validity of: [" + inputMsg["data"]["senderID"] + "] >> [" + inputMsg["data"]["receiverID"] + "] with $" + str(inputMsg["data"]["amount"]) + ". I said No")
 
         elif inputMsg["type"] == "Ans Valid Transaction":
             self.__voteValidTransaction[inputMsg["target"]][inputMsg["ans"]] += 1
@@ -352,7 +357,7 @@ class UserInterface(QtWidgets.QMainWindow):
                 QtWidgets.QMessageBox.warning(self, self.__programTitle, "There are less than 3 peers in your Sub-Network. Transactions are not allowed for now.", QtWidgets.QMessageBox.Ok)
                 self.__makeTransactionInputAmount.setText("")
                 self.__makeTransactionInputReceiverID.setText("")
-            elif int(self.__makeTransactionInputAmount.text()) > 0 and self.__makeTransactionInputReceiverID.text() != self.__accountID:
+            elif 0 < int(self.__makeTransactionInputAmount.text()) <= self.__accountWiseLedgerList[self.__accountID].viewPlanningBalance and self.__makeTransactionInputReceiverID.text() != self.__accountID:
                 task = {"senderID": self.__accountID, "receiverID": self.__makeTransactionInputReceiverID.text(), "amount": int(self.__makeTransactionInputAmount.text()), "timestamp": time()}
 
                 broadcastSubNetworkIndex = {self.__accountSubNetwork, str(self.__nodeList["nodeToSubNetwork"][task["receiverID"]])}
@@ -363,7 +368,7 @@ class UserInterface(QtWidgets.QMainWindow):
                 self.__makeTransactionInputAmount.setText("")
                 self.__makeTransactionInputReceiverID.setText("")
             else:
-                QtWidgets.QMessageBox.warning(self, self.__programTitle, "Negative or Null amount is not allowed.", QtWidgets.QMessageBox.Ok)
+                QtWidgets.QMessageBox.warning(self, self.__programTitle, "The inserted amount is invalid.", QtWidgets.QMessageBox.Ok)
                 self.__makeTransactionInputAmount.setText("")
                 self.__makeTransactionInputReceiverID.setText("")
 
@@ -373,7 +378,7 @@ class UserInterface(QtWidgets.QMainWindow):
             self.__makeTransactionInputReceiverID.setText("")
 
         except ValueError:
-            QtWidgets.QMessageBox.warning(self, self.__programTitle, "Please insert valid number.", QtWidgets.QMessageBox.Ok)
+            QtWidgets.QMessageBox.warning(self, self.__programTitle, "Please insert a number in the amount slot.", QtWidgets.QMessageBox.Ok)
             self.__makeTransactionInputAmount.setText("")
             self.__makeTransactionInputReceiverID.setText("")
 
