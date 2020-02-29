@@ -56,6 +56,10 @@ class Blockchain(object):
         return self.__balance
 
     @property
+    def viewBlockchain(self):
+        return self.__chain
+
+    @property
     def outputDict(self):
         return {"ownerID": self.__ownerID, "powDifficulty": self.__powDifficulty, "balance": self.__balance, "chain": self.__chain}
 

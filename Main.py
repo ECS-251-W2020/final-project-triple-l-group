@@ -6,7 +6,7 @@ import json
 import socket
 import sys
 import collections
-from time import time
+import time
 import os
 from distutils.util import strtobool
 from PyQt5 import QtWidgets, QtCore, QtGui
@@ -92,7 +92,7 @@ class UserInterface(QtWidgets.QMainWindow):
 
         # Create Transactions input Field and Current Balance
         self.__userInfoLabel = QtWidgets.QLabel(self)
-        self.__userInfoLabel.setText("User: " + self.__accountID + "\t Sub-Network Index: " + self.__accountSubNetwork)
+        self.__userInfoLabel.setText("User ID: " + self.__accountID + "\t Sub-Network Index: " + self.__accountSubNetwork)
         self.__userBalanceLabel = QtWidgets.QLabel(self)
         self.__userBalanceLabel.setText("Your Balance")
         self.__userBalance = QtWidgets.QLineEdit()
@@ -106,7 +106,7 @@ class UserInterface(QtWidgets.QMainWindow):
         self.__makeTransactionInputReceiverIDLabel.setText("Receiver ID")
         self.__makeTransactionInputReceiverID = QtWidgets.QLineEdit()
         self.__makeTransactionInputAmountIDLabel = QtWidgets.QLabel(self)
-        self.__makeTransactionInputAmountIDLabel.setText("amount")
+        self.__makeTransactionInputAmountIDLabel.setText("Amount")
         self.__makeTransactionInputAmount = QtWidgets.QLineEdit()
         self.__makeTransactionButton = QtWidgets.QPushButton("Make Transaction", self)
         self.__makeTransactionButton.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
@@ -119,7 +119,20 @@ class UserInterface(QtWidgets.QMainWindow):
         for peersTableHeaderIndex in range(0, len(self.__peersTableHeader)):
             self.__peersTable.horizontalHeader().setSectionResizeMode(peersTableHeaderIndex, QtWidgets.QHeaderView.ResizeToContents)
         self.__peersTable.horizontalHeader().setSectionResizeMode(self.__peersTableHeader["IP Address"], QtWidgets.QHeaderView.Stretch)
-        self.__setPeersTable()
+        self.__updatePeersTable()
+
+        # Create Transactions Histories Table
+        self.__transactionHistoriesTableHeader = {"Sender ID": 0, "Receiver ID": 1, "Amount": 2, "Time": 3}
+        self.__transactionHistoriesTable = QtWidgets.QTableWidget(0, len(self.__transactionHistoriesTableHeader))
+        self.__transactionHistoriesTable.setHorizontalHeaderLabels(self.__transactionHistoriesTableHeader.keys())
+        for transactionHistoriesTableHeaderIndex in range(0, len(self.__transactionHistoriesTableHeader)):
+            self.__transactionHistoriesTable.horizontalHeader().setSectionResizeMode(transactionHistoriesTableHeaderIndex, QtWidgets.QHeaderView.ResizeToContents)
+        self.__transactionHistoriesTable.horizontalHeader().setSectionResizeMode(self.__transactionHistoriesTableHeader["Time"], QtWidgets.QHeaderView.Stretch)
+
+        # Create Tabs for Peers Table and Personal Transaction Histories
+        self.__tabs = QtWidgets.QTabWidget()
+        self.__tabs.addTab(self.__peersTable, "Peers")
+        self.__tabs.addTab(self.__transactionHistoriesTable, "My Transactions")
 
         # Create Log Frame
         self.__logFrame = QtWidgets.QTextBrowser(self)
@@ -135,7 +148,7 @@ class UserInterface(QtWidgets.QMainWindow):
 
         # Manage the layout
         mainLayout = QtWidgets.QGridLayout()
-        mainLayout.addWidget(self.__peersTable, 0, 0, 5, 2)
+        mainLayout.addWidget(self.__tabs, 0, 0, 5, 2)
         mainLayout.addWidget(self.__userInfoLabel, 0, 2, 1, 2)
         mainLayout.addWidget(self.__userBalanceLabel, 1, 2, 1, 1)
         mainLayout.addWidget(self.__userBalance, 1, 3, 1, 1)
@@ -205,7 +218,7 @@ class UserInterface(QtWidgets.QMainWindow):
             if inputMsg["newPeer"] is not None and str(self.__nodeList["nodeToSubNetwork"][inputMsg["newPeer"]]) == self.__accountSubNetwork:
                 self.__accountWiseLedgerList[inputMsg["newPeer"]] = AccountWiseLedger(inputMsg["newPeer"], inputMsg["data"]["nodeToSubNetwork"][inputMsg["newPeer"]])
                 self.__send({"type": "New Peer ACK", "senderID": self.__accountID}, tuple(self.__nodeList["all"][inputMsg["newPeer"]]))
-            self.__setPeersTable()
+            self.__updatePeersTable()
 
             self.__print("<DNS> gives me new update")
 
@@ -306,6 +319,7 @@ class UserInterface(QtWidgets.QMainWindow):
                         if self.__accountWiseLedgerList[inputMsg["data"]["senderID"]].receiveResult(attachedBlock):
                             if inputMsg["data"]["senderID"] == self.__accountID:
                                 self.__userBalance.setText(str(self.__accountWiseLedgerList[self.__accountID].viewActualBalance))
+                                self.__updateTransactionHistoriesTable()
                                 self.__broadcast({"type": "Send Last Block Hash", "data": Blockchain.hash256(self.__accountWiseLedgerList[self.__accountID].viewLastBlock), "senderID": self.__accountID}, self.__nodeList["all"].keys(), True)
                         else:
                             self.__print("<High Council> told me this task is invalid. Therefore, task abort")
@@ -320,6 +334,7 @@ class UserInterface(QtWidgets.QMainWindow):
                         if self.__accountWiseLedgerList[inputMsg["data"]["receiverID"]].receiveResult(attachedBlock):
                             if inputMsg["data"]["receiverID"] == self.__accountID:
                                 self.__userBalance.setText(str(self.__accountWiseLedgerList[self.__accountID].viewActualBalance))
+                                self.__updateTransactionHistoriesTable()
                                 self.__broadcast({"type": "Send Last Block Hash", "data": Blockchain.hash256(self.__accountWiseLedgerList[self.__accountID].viewLastBlock), "senderID": self.__accountID}, self.__nodeList["all"].keys(), True)
                         else:
                             self.__print("<High Council> told me this task is invalid. Therefore, task abort")
@@ -355,13 +370,21 @@ class UserInterface(QtWidgets.QMainWindow):
 
         return highCouncilMember
 
-    def __setPeersTable(self):
+    def __updatePeersTable(self):
         for rowIndex, peersID in enumerate(self.__nodeList["all"].keys()):
             self.__peersTable.setRowCount(rowIndex + 1)
             self.__peersTable.setItem(rowIndex, self.__peersTableHeader["User ID"], QtWidgets.QTableWidgetItem(peersID))
             self.__peersTable.setItem(rowIndex, self.__peersTableHeader["IP Address"], QtWidgets.QTableWidgetItem(self.__nodeList["all"][peersID][0]))
             self.__peersTable.setItem(rowIndex, self.__peersTableHeader["Port"], QtWidgets.QTableWidgetItem(str(self.__nodeList["all"][peersID][1])))
             self.__peersTable.setItem(rowIndex, self.__peersTableHeader["SN"], QtWidgets.QTableWidgetItem(str(self.__nodeList["nodeToSubNetwork"][peersID])))
+
+    def __updateTransactionHistoriesTable(self):
+        for rowIndex, transaction in enumerate(self.__accountWiseLedgerList[self.__accountID].viewBlockchain[1:]):
+            self.__transactionHistoriesTable.setRowCount(rowIndex + 1)
+            self.__transactionHistoriesTable.setItem(rowIndex, self.__transactionHistoriesTableHeader["Sender ID"], QtWidgets.QTableWidgetItem(transaction["senderID"]))
+            self.__transactionHistoriesTable.setItem(rowIndex, self.__transactionHistoriesTableHeader["Receiver ID"], QtWidgets.QTableWidgetItem(transaction["receiverID"]))
+            self.__transactionHistoriesTable.setItem(rowIndex, self.__transactionHistoriesTableHeader["Amount"], QtWidgets.QTableWidgetItem(str(transaction["amount"])))
+            self.__transactionHistoriesTable.setItem(rowIndex, self.__transactionHistoriesTableHeader["Time"], QtWidgets.QTableWidgetItem(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(transaction["timestamp"]))))
 
     def getInputFromPopUpDialog(self, questionString):
         inputText, okPressed = QtWidgets.QInputDialog.getText(self, self.__programTitle, questionString, QtWidgets.QLineEdit.Normal, "")
@@ -382,7 +405,7 @@ class UserInterface(QtWidgets.QMainWindow):
                 self.__makeTransactionInputAmount.setText("")
                 self.__makeTransactionInputReceiverID.setText("")
             elif 0 < int(self.__makeTransactionInputAmount.text()) <= self.__accountWiseLedgerList[self.__accountID].viewPlanningBalance and self.__makeTransactionInputReceiverID.text() != self.__accountID:
-                task = {"senderID": self.__accountID, "receiverID": self.__makeTransactionInputReceiverID.text(), "amount": int(self.__makeTransactionInputAmount.text()), "timestamp": time()}
+                task = {"senderID": self.__accountID, "receiverID": self.__makeTransactionInputReceiverID.text(), "amount": int(self.__makeTransactionInputAmount.text()), "timestamp": time.time()}
 
                 broadcastSubNetworkIndex = {self.__accountSubNetwork, str(self.__nodeList["nodeToSubNetwork"][task["receiverID"]])}
                 for subNetworkIndex in broadcastSubNetworkIndex:

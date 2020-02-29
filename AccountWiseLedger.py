@@ -91,6 +91,10 @@ class AccountWiseLedger(object):
         return self.__blockchain.viewLastBlock
 
     @property
+    def viewBlockchain(self):
+        return self.__blockchain.viewBlockchain
+
+    @property
     def outputDict(self):
         ans = {
             "ownerID": self.__ownerID,
