@@ -238,6 +238,7 @@ class UserInterface(QtWidgets.QMainWindow):
                 self.__voteAWL = collections.Counter()
                 self.__broadcast({"type": "Send Last Block Hash", "data": Blockchain.hash256(self.__accountWiseLedgerList[self.__accountID].viewLastBlock), "senderID": self.__accountID}, set(self.__nodeList["all"].keys()), True)
                 self.__userBalance.setText(str(self.__accountWiseLedgerList[self.__accountID].viewActualBalance))
+                self.__updateTransactionHistoriesTable()
 
             self.__print("[" + inputMsg["senderID"] + "] gives me its AWL List")
 
