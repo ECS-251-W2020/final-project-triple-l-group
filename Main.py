@@ -50,7 +50,7 @@ class UserInterface(QtWidgets.QMainWindow):
 
         self.__accountID = self.getInputFromPopUpDialog("Your User Name:")
         self.__accountSubNetwork = ""
-        self.__accountWiseLedgerDNS = ("192.168.0.29", 8000)
+        self.__accountWiseLedgerDNS = ("192.168.0.15", 8000)
         self.__nodeList = {}
         self.__nodeLastBlockHash = {}
         self.__accountWiseLedgerList = {}
@@ -93,6 +93,8 @@ class UserInterface(QtWidgets.QMainWindow):
         # Create Transactions input Field and Current Balance
         self.__userInfoLabel = QtWidgets.QLabel(self)
         self.__userInfoLabel.setText("User: " + self.__accountID + "\t Sub-Network Index: " + self.__accountSubNetwork)
+        self.__userBalanceLabel = QtWidgets.QLabel(self)
+        self.__userBalanceLabel.setText("Your Balance")
         self.__userBalance = QtWidgets.QLineEdit()
         try:
             self.__userBalance.setText(str(self.__accountWiseLedgerList[self.__accountID].viewActualBalance))
@@ -100,14 +102,24 @@ class UserInterface(QtWidgets.QMainWindow):
             pass
         finally:
             self.__userBalance.setEnabled(False)
+        self.__makeTransactionInputReceiverIDLabel = QtWidgets.QLabel(self)
+        self.__makeTransactionInputReceiverIDLabel.setText("Receiver ID")
         self.__makeTransactionInputReceiverID = QtWidgets.QLineEdit()
+        self.__makeTransactionInputAmountIDLabel = QtWidgets.QLabel(self)
+        self.__makeTransactionInputAmountIDLabel.setText("amount")
         self.__makeTransactionInputAmount = QtWidgets.QLineEdit()
         self.__makeTransactionButton = QtWidgets.QPushButton("Make Transaction", self)
         self.__makeTransactionButton.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
         self.__makeTransactionButton.clicked.connect(self.setTransactionButtonHandler)
 
         # Create Peers Table
-        self.__peersTable = QtWidgets.QTextBrowser(self)
+        self.__peersTableHeader = {"User ID": 0, "IP Address": 1, "Port": 2, "SN": 3}
+        self.__peersTable = QtWidgets.QTableWidget(0, len(self.__peersTableHeader))
+        self.__peersTable.setHorizontalHeaderLabels(self.__peersTableHeader.keys())
+        for peersTableHeaderIndex in range(0, len(self.__peersTableHeader)):
+            self.__peersTable.horizontalHeader().setSectionResizeMode(peersTableHeaderIndex, QtWidgets.QHeaderView.ResizeToContents)
+        self.__peersTable.horizontalHeader().setSectionResizeMode(self.__peersTableHeader["IP Address"], QtWidgets.QHeaderView.Stretch)
+        self.__setPeersTable()
 
         # Create Log Frame
         self.__logFrame = QtWidgets.QTextBrowser(self)
@@ -125,14 +137,17 @@ class UserInterface(QtWidgets.QMainWindow):
         mainLayout = QtWidgets.QGridLayout()
         mainLayout.addWidget(self.__peersTable, 0, 0, 5, 2)
         mainLayout.addWidget(self.__userInfoLabel, 0, 2, 1, 2)
-        mainLayout.addWidget(self.__userBalance, 1, 2, 1, 1)
-        mainLayout.addWidget(self.__makeTransactionInputReceiverID, 2, 2, 1, 1)
-        mainLayout.addWidget(self.__makeTransactionInputAmount, 3, 2, 1, 1)
-        mainLayout.addWidget(self.__makeTransactionButton, 1, 3, 3, 1)
-        mainLayout.addWidget(self.__logFrame, 4, 2, 1, 2)
+        mainLayout.addWidget(self.__userBalanceLabel, 1, 2, 1, 1)
+        mainLayout.addWidget(self.__userBalance, 1, 3, 1, 1)
+        mainLayout.addWidget(self.__makeTransactionInputReceiverIDLabel, 2, 2, 1, 1)
+        mainLayout.addWidget(self.__makeTransactionInputReceiverID, 2, 3, 1, 1)
+        mainLayout.addWidget(self.__makeTransactionInputAmountIDLabel, 3, 2, 1, 1)
+        mainLayout.addWidget(self.__makeTransactionInputAmount, 3, 3, 1, 1)
+        mainLayout.addWidget(self.__makeTransactionButton, 1, 4, 3, 1)
+        mainLayout.addWidget(self.__logFrame, 4, 2, 1, 3)
         mainLayout.addWidget(self.__dnsUpdateButton, 5, 0, 1, 1)
         mainLayout.addWidget(self.__awlUpdateButton, 5, 1, 1, 1)
-        mainLayout.addWidget(self.__progressBar, 5, 2, 1, 2)
+        mainLayout.addWidget(self.__progressBar, 5, 2, 1, 3)
 
         self.__centralWidget.setLayout(mainLayout)
         self.show()
@@ -190,6 +205,7 @@ class UserInterface(QtWidgets.QMainWindow):
             if inputMsg["newPeer"] is not None and str(self.__nodeList["nodeToSubNetwork"][inputMsg["newPeer"]]) == self.__accountSubNetwork:
                 self.__accountWiseLedgerList[inputMsg["newPeer"]] = AccountWiseLedger(inputMsg["newPeer"], inputMsg["data"]["nodeToSubNetwork"][inputMsg["newPeer"]])
                 self.__send({"type": "New Peer ACK", "senderID": self.__accountID}, tuple(self.__nodeList["all"][inputMsg["newPeer"]]))
+            self.__setPeersTable()
 
             self.__print("<DNS> gives me new update")
 
@@ -338,6 +354,14 @@ class UserInterface(QtWidgets.QMainWindow):
                 highCouncilMember[designatedMember] = True
 
         return highCouncilMember
+
+    def __setPeersTable(self):
+        for rowIndex, peersID in enumerate(self.__nodeList["all"].keys()):
+            self.__peersTable.setRowCount(rowIndex + 1)
+            self.__peersTable.setItem(rowIndex, self.__peersTableHeader["User ID"], QtWidgets.QTableWidgetItem(peersID))
+            self.__peersTable.setItem(rowIndex, self.__peersTableHeader["IP Address"], QtWidgets.QTableWidgetItem(self.__nodeList["all"][peersID][0]))
+            self.__peersTable.setItem(rowIndex, self.__peersTableHeader["Port"], QtWidgets.QTableWidgetItem(str(self.__nodeList["all"][peersID][1])))
+            self.__peersTable.setItem(rowIndex, self.__peersTableHeader["SN"], QtWidgets.QTableWidgetItem(str(self.__nodeList["nodeToSubNetwork"][peersID])))
 
     def getInputFromPopUpDialog(self, questionString):
         inputText, okPressed = QtWidgets.QInputDialog.getText(self, self.__programTitle, questionString, QtWidgets.QLineEdit.Normal, "")
