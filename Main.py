@@ -42,6 +42,8 @@ class UserInterface(QtWidgets.QMainWindow):
 
     def __init__(self):
         super(UserInterface, self).__init__()
+        self.__desktop = QtWidgets.QApplication.desktop()
+        self.__screenRectangle = self.__desktop.screenGeometry(self.__desktop.screenNumber(QtGui.QCursor.pos()))
         self.__windowStartPositionX = 150
         self.__windowStartPositionY = 100
         self.__windowHeight = 600
@@ -252,6 +254,10 @@ class UserInterface(QtWidgets.QMainWindow):
 
         elif inputMsg["type"] == "New Transaction":
             if inputMsg["senderID"] == inputMsg["data"]["senderID"]:
+                if self.__accountID == inputMsg["data"]["receiverID"]:
+                    self.__progressBar.setMaximum(len(self.__nodeList["sizeOfSubNetwork"]) + ((2 * ((self.__nodeList["sizeOfSubNetwork"][self.__accountSubNetwork] - 1) // 2)) if str(self.__nodeList["nodeToSubNetwork"][inputMsg["data"]["senderID"]]) == self.__accountSubNetwork else ((self.__nodeList["sizeOfSubNetwork"][self.__accountSubNetwork] - 1) // 2)))
+                    self.__progressBar.setValue(0)
+
                 self.__print("[" + inputMsg["senderID"] + "] gives me a new task: [" + inputMsg["data"]["senderID"] + "] >> [" + inputMsg["data"]["receiverID"] + "] with $" + str(inputMsg["data"]["amount"]))
                 highCouncilMemberDict = self.__highCouncilMemberElection(inputMsg["data"])
 
@@ -313,6 +319,8 @@ class UserInterface(QtWidgets.QMainWindow):
 
                 if inputMsg["memo"] == "Sender-Side-Block" and inputMsg["data"]["senderID"] in self.__accountWiseLedgerList:
                     self.__voteSenderBlock[taskCode][resultCode].add(json.dumps(inputMsg["data"]))
+                    if self.__accountID == inputMsg["data"]["senderID"] or self.__accountID == inputMsg["data"]["receiverID"]:
+                        self.__progressBar.setValue(self.__progressBar.value() + 1)
 
                     wonSenderResult = max(self.__voteSenderBlock[taskCode].keys(), key=lambda x: len(x))
                     if len(self.__voteSenderBlock[taskCode][wonSenderResult]) > (len(transactionTaskHandlerDict) - 1) // 2:
@@ -322,12 +330,19 @@ class UserInterface(QtWidgets.QMainWindow):
                                 self.__userBalance.setText(str(self.__accountWiseLedgerList[self.__accountID].viewActualBalance))
                                 self.__updateTransactionHistoriesTable()
                                 self.__broadcast({"type": "Send Last Block Hash", "data": Blockchain.hash256(self.__accountWiseLedgerList[self.__accountID].viewLastBlock), "senderID": self.__accountID}, self.__nodeList["all"].keys(), True)
+                                self.showFloatingMessage("Transaction Complete")
+                                self.__progressBar.reset()
                         else:
+                            if inputMsg["data"]["senderID"] == self.__accountID:
+                                self.showFloatingMessage("Transaction Incomplete")
+                                self.__progressBar.reset()
                             self.__print("<High Council> told me this task is invalid. Therefore, task abort")
                         del self.__voteSenderBlock[taskCode]
 
                 if inputMsg["memo"] == "Receiver-Side-Block" and inputMsg["data"]["receiverID"] in self.__accountWiseLedgerList:
                     self.__voteReceiverBlock[taskCode][resultCode].add(json.dumps(inputMsg["data"]))
+                    if self.__accountID == inputMsg["data"]["senderID"] or self.__accountID == inputMsg["data"]["receiverID"]:
+                        self.__progressBar.setValue(self.__progressBar.value() + 1)
 
                     wonReceiverResult = max(self.__voteReceiverBlock[taskCode].keys(), key=lambda x: len(x))
                     if len(self.__voteReceiverBlock[taskCode][wonReceiverResult]) > (len(transactionTaskHandlerDict) - 1) // 2:
@@ -337,7 +352,12 @@ class UserInterface(QtWidgets.QMainWindow):
                                 self.__userBalance.setText(str(self.__accountWiseLedgerList[self.__accountID].viewActualBalance))
                                 self.__updateTransactionHistoriesTable()
                                 self.__broadcast({"type": "Send Last Block Hash", "data": Blockchain.hash256(self.__accountWiseLedgerList[self.__accountID].viewLastBlock), "senderID": self.__accountID}, self.__nodeList["all"].keys(), True)
+                                self.showFloatingMessage("Transaction Complete")
+                                self.__progressBar.reset()
                         else:
+                            if inputMsg["data"]["receiverID"] == self.__accountID:
+                                self.showFloatingMessage("Transaction Incomplete")
+                                self.__progressBar.reset()
                             self.__print("<High Council> told me this task is invalid. Therefore, task abort")
                         del self.__voteReceiverBlock[taskCode]
 
@@ -369,6 +389,9 @@ class UserInterface(QtWidgets.QMainWindow):
 
                 highCouncilMember[designatedMember] = True
 
+            if self.__accountID == task["senderID"] or self.__accountID == task["receiverID"]:
+                self.__progressBar.setValue(self.__progressBar.value() + 1)
+
         return highCouncilMember
 
     def __updatePeersTable(self):
@@ -392,6 +415,15 @@ class UserInterface(QtWidgets.QMainWindow):
         if okPressed and inputText:
             return inputText
 
+    def showFloatingMessage(self, message="", delay=500):
+
+        floatingMsgLabel = QtWidgets.QLabel(self)
+        floatingMsgLabel.setWindowFlags(QtCore.Qt.ToolTip)
+        floatingMsgLabel.setText(message)
+        floatingMsgLabel.move(self.__screenRectangle.bottomRight())
+        floatingMsgLabel.show()
+        QtCore.QTimer.singleShot(delay, floatingMsgLabel.hide)
+
     def dnsUpdateButtonHandler(self):
         outputMsg = {"type": "Request DNS Update", "senderID": self.__accountID}
         self.__send(outputMsg, self.__accountWiseLedgerDNS)
@@ -411,6 +443,9 @@ class UserInterface(QtWidgets.QMainWindow):
                 broadcastSubNetworkIndex = {self.__accountSubNetwork, str(self.__nodeList["nodeToSubNetwork"][task["receiverID"]])}
                 for subNetworkIndex in broadcastSubNetworkIndex:
                     self.__broadcast({"type": "New Transaction", "data": task, "senderID": self.__accountID}, set(self.__nodeList["subNetworkToNode"][subNetworkIndex].keys()), True)
+                self.__progressBar.setMaximum(len(self.__nodeList["sizeOfSubNetwork"]) + ((2 * ((self.__nodeList["sizeOfSubNetwork"][self.__accountSubNetwork] - 1) // 2)) if str(self.__nodeList["nodeToSubNetwork"][self.__makeTransactionInputReceiverID.text()]) == self.__accountSubNetwork else ((self.__nodeList["sizeOfSubNetwork"][self.__accountSubNetwork] - 1) // 2)))
+                self.__progressBar.setValue(0)
+
             elif self.__makeTransactionInputReceiverID.text() == self.__accountID:
                 QtWidgets.QMessageBox.warning(self, self.__programTitle, "Transferring amount to yourself is not allowed.", QtWidgets.QMessageBox.Ok)
                 self.__makeTransactionInputAmount.setText("")
