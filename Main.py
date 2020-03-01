@@ -38,6 +38,20 @@ class ListenThread(QThread):
             self.listenedMsg.emit(inputMsg)
 
 
+class MyProgressBar(QtWidgets.QProgressBar):
+
+    def __init__(self):
+        super().__init__()
+        self.setAlignment(QtCore.Qt.AlignCenter)
+        self._text = None
+
+    def setText(self, text):
+        self._text = text
+
+    def text(self):
+        return self._text
+
+
 class UserInterface(QtWidgets.QMainWindow):
 
     def __init__(self):
@@ -146,7 +160,7 @@ class UserInterface(QtWidgets.QMainWindow):
         self.__dnsUpdateButton.clicked.connect(self.dnsUpdateButtonHandler)
 
         # Create Progress Bar
-        self.__progressBar = QtWidgets.QProgressBar(self)
+        self.__progressBar = MyProgressBar()
 
         # Manage the layout
         mainLayout = QtWidgets.QGridLayout()
@@ -255,8 +269,11 @@ class UserInterface(QtWidgets.QMainWindow):
         elif inputMsg["type"] == "New Transaction":
             if inputMsg["senderID"] == inputMsg["data"]["senderID"]:
                 if self.__accountID == inputMsg["data"]["receiverID"]:
+                    self.__progressBar.setText("")
                     self.__progressBar.setMaximum(len(self.__nodeList["sizeOfSubNetwork"]) + ((2 * ((self.__nodeList["sizeOfSubNetwork"][self.__accountSubNetwork] - 1) // 2)) if str(self.__nodeList["nodeToSubNetwork"][inputMsg["data"]["senderID"]]) == self.__accountSubNetwork else ((self.__nodeList["sizeOfSubNetwork"][self.__accountSubNetwork] - 1) // 2)))
                     self.__progressBar.setValue(0)
+                    self.__makeTransactionInputReceiverID.setEnabled(False)
+                    self.__makeTransactionInputAmount.setEnabled(False)
 
                 self.__print("[" + inputMsg["senderID"] + "] gives me a new task: [" + inputMsg["data"]["senderID"] + "] >> [" + inputMsg["data"]["receiverID"] + "] with $" + str(inputMsg["data"]["amount"]))
                 highCouncilMemberDict = self.__highCouncilMemberElection(inputMsg["data"])
@@ -330,11 +347,13 @@ class UserInterface(QtWidgets.QMainWindow):
                                 self.__userBalance.setText(str(self.__accountWiseLedgerList[self.__accountID].viewActualBalance))
                                 self.__updateTransactionHistoriesTable()
                                 self.__broadcast({"type": "Send Last Block Hash", "data": Blockchain.hash256(self.__accountWiseLedgerList[self.__accountID].viewLastBlock), "senderID": self.__accountID}, self.__nodeList["all"].keys(), True)
-                                self.showFloatingMessage("Transaction Complete")
+                                self.__progressBar.setText("Task Complete")
                                 self.__progressBar.reset()
+                                self.__makeTransactionInputReceiverID.setEnabled(True)
+                                self.__makeTransactionInputAmount.setEnabled(True)
                         else:
                             if inputMsg["data"]["senderID"] == self.__accountID:
-                                self.showFloatingMessage("Transaction Incomplete")
+                                self.__progressBar.setText("Task Incomplete")
                                 self.__progressBar.reset()
                             self.__print("<High Council> told me this task is invalid. Therefore, task abort")
                         del self.__voteSenderBlock[taskCode]
@@ -352,11 +371,13 @@ class UserInterface(QtWidgets.QMainWindow):
                                 self.__userBalance.setText(str(self.__accountWiseLedgerList[self.__accountID].viewActualBalance))
                                 self.__updateTransactionHistoriesTable()
                                 self.__broadcast({"type": "Send Last Block Hash", "data": Blockchain.hash256(self.__accountWiseLedgerList[self.__accountID].viewLastBlock), "senderID": self.__accountID}, self.__nodeList["all"].keys(), True)
-                                self.showFloatingMessage("Transaction Complete")
+                                self.__progressBar.setText("Task Complete")
                                 self.__progressBar.reset()
+                                self.__makeTransactionInputReceiverID.setEnabled(True)
+                                self.__makeTransactionInputAmount.setEnabled(True)
                         else:
                             if inputMsg["data"]["receiverID"] == self.__accountID:
-                                self.showFloatingMessage("Transaction Incomplete")
+                                self.__progressBar.setText("Task Incomplete")
                                 self.__progressBar.reset()
                             self.__print("<High Council> told me this task is invalid. Therefore, task abort")
                         del self.__voteReceiverBlock[taskCode]
@@ -415,15 +436,6 @@ class UserInterface(QtWidgets.QMainWindow):
         if okPressed and inputText:
             return inputText
 
-    def showFloatingMessage(self, message="", delay=500):
-
-        floatingMsgLabel = QtWidgets.QLabel(self)
-        floatingMsgLabel.setWindowFlags(QtCore.Qt.ToolTip)
-        floatingMsgLabel.setText(message)
-        floatingMsgLabel.move(self.__screenRectangle.bottomRight())
-        floatingMsgLabel.show()
-        QtCore.QTimer.singleShot(delay, floatingMsgLabel.hide)
-
     def dnsUpdateButtonHandler(self):
         outputMsg = {"type": "Request DNS Update", "senderID": self.__accountID}
         self.__send(outputMsg, self.__accountWiseLedgerDNS)
@@ -437,12 +449,19 @@ class UserInterface(QtWidgets.QMainWindow):
                 QtWidgets.QMessageBox.warning(self, self.__programTitle, "There are less than 3 peers in your Sub-Network. Transactions are not allowed for now.", QtWidgets.QMessageBox.Ok)
                 self.__makeTransactionInputAmount.setText("")
                 self.__makeTransactionInputReceiverID.setText("")
+            elif not self.__makeTransactionInputReceiverID.isEnabled() or not self.__makeTransactionInputAmount.isEnabled():
+                self.__print("************SYSTEM IS BUSY**************")
+
             elif 0 < int(self.__makeTransactionInputAmount.text()) <= self.__accountWiseLedgerList[self.__accountID].viewPlanningBalance and self.__makeTransactionInputReceiverID.text() != self.__accountID:
                 task = {"senderID": self.__accountID, "receiverID": self.__makeTransactionInputReceiverID.text(), "amount": int(self.__makeTransactionInputAmount.text()), "timestamp": time.time()}
 
                 broadcastSubNetworkIndex = {self.__accountSubNetwork, str(self.__nodeList["nodeToSubNetwork"][task["receiverID"]])}
                 for subNetworkIndex in broadcastSubNetworkIndex:
                     self.__broadcast({"type": "New Transaction", "data": task, "senderID": self.__accountID}, set(self.__nodeList["subNetworkToNode"][subNetworkIndex].keys()), True)
+
+                self.__makeTransactionInputReceiverID.setEnabled(False)
+                self.__makeTransactionInputAmount.setEnabled(False)
+                self.__progressBar.setText("")
                 self.__progressBar.setMaximum(len(self.__nodeList["sizeOfSubNetwork"]) + ((2 * ((self.__nodeList["sizeOfSubNetwork"][self.__accountSubNetwork] - 1) // 2)) if str(self.__nodeList["nodeToSubNetwork"][self.__makeTransactionInputReceiverID.text()]) == self.__accountSubNetwork else ((self.__nodeList["sizeOfSubNetwork"][self.__accountSubNetwork] - 1) // 2)))
                 self.__progressBar.setValue(0)
 
