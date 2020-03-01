@@ -206,7 +206,7 @@ class UserInterface(QtWidgets.QMainWindow):
     def __listen(self):
         inputMsg = None
         while not inputMsg:
-            inputMsg, sourceAddress = self.__socket.recvfrom(1024)
+            inputMsg, sourceAddress = self.__socket.recvfrom(64 * 1024 * 1024)
             inputMsg = json.loads(inputMsg)
 
         return inputMsg
