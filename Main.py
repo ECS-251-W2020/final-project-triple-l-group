@@ -1,26 +1,22 @@
 from AccountWiseLedger import *
-from urllib.parse import urlencode
-from io import BytesIO
-import pycurl
 import json
 import socket
 import sys
 import collections
 import time
 import os
-from distutils.util import strtobool
 from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtCore import QThread, pyqtSignal, QMutex
-from pprint import pprint
 
 
-class ListenThread(QThread):
+class MyListenThread(QThread):
     listenedMsg = pyqtSignal(dict)
 
-    def __init__(self, socket):
-        super(ListenThread, self).__init__()
+    def __init__(self, socket, timeOut):
+        super(MyListenThread, self).__init__()
         self.__mutex = QMutex()
         self.__socket = socket
+        self.__socketTimeOut = timeOut
         self.__socketBufferSize = 64 * 1024 * 1024
 
     def run(self):
@@ -128,13 +124,14 @@ class UserInterface(QtWidgets.QMainWindow):
         # Initialize the socket
         self.__socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.__socket.bind((self.__getHostnameIP(), 0))
+        self.__socketTimeOut = 3
 
         # Initialize data
         self.__initData()
 
         # Initialize Multi-Threading for Listening
         self.__mutex = QMutex()
-        self.__listenThread = ListenThread(self.__socket)
+        self.__listenThread = MyListenThread(self.__socket, self.__socketTimeOut)
         self.__listenThread.listenedMsg.connect(self.__updateLocal)
         self.__listenThread.start()
 
@@ -273,10 +270,17 @@ class UserInterface(QtWidgets.QMainWindow):
 
     def __listen(self):
         inputMsg = None
-        while not inputMsg:
-            inputMsg, sourceAddress = self.__socket.recvfrom(64 * 1024 * 1024)
-            inputMsg = json.loads(inputMsg)
+        self.__socket.settimeout(self.__socketTimeOut)
 
+        while not inputMsg:
+            try:
+                inputMsg, sourceAddress = self.__socket.recvfrom(64 * 1024 * 1024)
+                inputMsg = json.loads(inputMsg)
+            except (ConnectionResetError, socket.timeout):
+                QtWidgets.QMessageBox.warning(self, self.__programTitle, "The remote server is not responded. Please check your connection settings.", QtWidgets.QMessageBox.Ok)
+                sys.exit(0)
+
+        self.__socket.settimeout(None)
         return inputMsg
 
     def __send(self, outputMsg, ipPortTuple):
@@ -284,14 +288,9 @@ class UserInterface(QtWidgets.QMainWindow):
         return
 
     def __broadcast(self, outputMsg, targetMemberSet=None, meInclude=False):
-        if targetMemberSet is None:
-            for nodeID in self.__nodeList["all"].keys():
-                if nodeID != self.__accountID or meInclude:
-                    self.__send(outputMsg, tuple(self.__nodeList["all"][nodeID]))
-        else:
-            for nodeID in targetMemberSet:
-                if nodeID != self.__accountID or meInclude:
-                    self.__send(outputMsg, tuple(self.__nodeList["all"][nodeID]))
+        for nodeID in targetMemberSet if targetMemberSet else self.__nodeList["all"].keys():
+            if nodeID != self.__accountID or meInclude:
+                self.__send(outputMsg, tuple(self.__nodeList["all"][nodeID]))
 
     def __updateLocal(self, inputMsg):
         if inputMsg["type"] == "New Peer ACK":

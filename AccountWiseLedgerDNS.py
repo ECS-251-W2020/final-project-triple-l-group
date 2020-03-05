@@ -89,6 +89,7 @@ class AccountWiseLedgerDNS(object):
                 try:
                     self.__K_numOfSubNetwork = int(inputMsg.split(" ")[1])
                     self.__resetDNSTable()
+                    print("The number of Sub-Networks has been set to: ", self.__K_numOfSubNetwork)
                 except (IndexError, ValueError):
                     print("Please insert a valid number.")
             elif inputMsg == "cfg":
