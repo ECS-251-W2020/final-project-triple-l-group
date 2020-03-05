@@ -8,30 +8,44 @@ import os
 from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtCore import QThread, pyqtSignal, QMutex
 
+SOCKET_BUFFER_SIZE = 64 * 1024 * 1024
+
 
 class MyListenThread(QThread):
     listenedMsg = pyqtSignal(dict)
 
-    def __init__(self, socket, timeOut):
+    def __init__(self, parent, title, socket, timeout=None):
         super(MyListenThread, self).__init__()
+        self.__mainWindow = parent
+        self.__programTitle = title
+
         self.__mutex = QMutex()
         self.__socket = socket
-        self.__socketTimeOut = timeOut
-        self.__socketBufferSize = 64 * 1024 * 1024
+        self.__socketTimeout = timeout
 
     def run(self):
         while True:
-            while True:
-                try:
-                    self.__mutex.lock()
-                    inputMsg, sourceAddress = self.__socket.recvfrom(self.__socketBufferSize)
-                    inputMsg = json.loads(inputMsg)
-                    self.__mutex.unlock()
-                    break
-                except:
-                    pass
+            self.__mutex.lock()
+            inputMsg = MyListenThread.listen(self.__mainWindow, self.__programTitle, self.__socket, SOCKET_BUFFER_SIZE, self.__socketTimeout)
+            self.__mutex.unlock()
 
             self.listenedMsg.emit(inputMsg)
+
+    @staticmethod
+    def listen(parent, title, mySocket, socketBufferSize, timeout=None):
+        inputMsg = None
+        mySocket.settimeout(timeout)
+
+        while not inputMsg:
+            try:
+                inputMsg, sourceAddress = mySocket.recvfrom(socketBufferSize)
+                inputMsg = json.loads(inputMsg)
+            except (ConnectionResetError, socket.timeout):
+                QtWidgets.QMessageBox.warning(parent, title, "The remote endpoint has no response. Please check your connection settings.", QtWidgets.QMessageBox.Ok)
+                sys.exit(0)
+
+        mySocket.settimeout(None)
+        return inputMsg
 
 
 class MyProgressBar(QtWidgets.QProgressBar):
@@ -124,14 +138,14 @@ class UserInterface(QtWidgets.QMainWindow):
         # Initialize the socket
         self.__socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.__socket.bind((self.__getHostnameIP(), 0))
-        self.__socketTimeOut = 3
+        self.__socketTimeout = 3
 
         # Initialize data
         self.__initData()
 
         # Initialize Multi-Threading for Listening
         self.__mutex = QMutex()
-        self.__listenThread = MyListenThread(self.__socket, self.__socketTimeOut)
+        self.__listenThread = MyListenThread(self, self.__programTitle, self.__socket)
         self.__listenThread.listenedMsg.connect(self.__updateLocal)
         self.__listenThread.start()
 
@@ -149,9 +163,9 @@ class UserInterface(QtWidgets.QMainWindow):
         self.__rightFrame = QtWidgets.QFrame()
 
         # Create Sub-Frame Splitter
-        self.__vSplitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
-        self.__vSplitter.addWidget(self.__leftFrame)
-        self.__vSplitter.addWidget(self.__rightFrame)
+        self.__hSplitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
+        self.__hSplitter.addWidget(self.__leftFrame)
+        self.__hSplitter.addWidget(self.__rightFrame)
 
         # Menu Bar Actions
         menuBarAction_View_ShowMyData = QtWidgets.QAction("Show My Data", self)
@@ -238,7 +252,7 @@ class UserInterface(QtWidgets.QMainWindow):
         self.__rightFrame.setLayout(rightLayout)
 
         mainLayout = QtWidgets.QGridLayout()
-        mainLayout.addWidget(self.__vSplitter, 0, 0, 1, 3)
+        mainLayout.addWidget(self.__hSplitter, 0, 0, 1, 3)
         mainLayout.addWidget(self.__dnsUpdateButton, 1, 0, 1, 1)
         mainLayout.addWidget(self.__awlUpdateButton, 1, 1, 1, 1)
         mainLayout.addWidget(self.__progressBar, 1, 2, 1, 1)
@@ -250,7 +264,7 @@ class UserInterface(QtWidgets.QMainWindow):
         while True:
             try:
                 self.__send({"type": "New Peer", "senderID": self.__accountID}, self.__accountWiseLedgerDNS)
-                self.__nodeList = self.__listen()["data"]
+                self.__nodeList = MyListenThread.listen(self, self.__programTitle, self.__socket, SOCKET_BUFFER_SIZE, 3)["data"]
                 break
             except KeyError:
                 pass
@@ -267,21 +281,6 @@ class UserInterface(QtWidgets.QMainWindow):
             return socket.gethostbyname(socket.gethostname())
         except:
             return None
-
-    def __listen(self):
-        inputMsg = None
-        self.__socket.settimeout(self.__socketTimeOut)
-
-        while not inputMsg:
-            try:
-                inputMsg, sourceAddress = self.__socket.recvfrom(64 * 1024 * 1024)
-                inputMsg = json.loads(inputMsg)
-            except (ConnectionResetError, socket.timeout):
-                QtWidgets.QMessageBox.warning(self, self.__programTitle, "The remote server is not responded. Please check your connection settings.", QtWidgets.QMessageBox.Ok)
-                sys.exit(0)
-
-        self.__socket.settimeout(None)
-        return inputMsg
 
     def __send(self, outputMsg, ipPortTuple):
         self.__socket.sendto(json.dumps(outputMsg).encode(), ipPortTuple)
