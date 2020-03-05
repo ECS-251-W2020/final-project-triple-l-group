@@ -66,7 +66,7 @@ class UserInterface(QtWidgets.QMainWindow):
 
         self.__accountID = self.getInputFromPopUpDialog("Your User Name:")
         self.__accountSubNetwork = ""
-        self.__accountWiseLedgerDNS = ("192.168.0.15", 8000)
+        self.__accountWiseLedgerDNS = ("192.168.0.11", 8000)
         self.__nodeList = {}
         self.__nodeLastBlockHash = {}
         self.__accountWiseLedgerList = {}
@@ -96,6 +96,15 @@ class UserInterface(QtWidgets.QMainWindow):
         self.setCentralWidget(self.__centralWidget)
         self.setGeometry(self.__windowStartPositionX, self.__windowStartPositionY, self.__windowWidth, self.__windowHeight)
         self.setWindowTitle(self.__programTitle)
+
+        # Create Sub-Frame
+        self.__leftFrame = QtWidgets.QFrame()
+        self.__rightFrame = QtWidgets.QFrame()
+
+        # Create Sub-Frame Splitter
+        self.__vSplitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
+        self.__vSplitter.addWidget(self.__leftFrame)
+        self.__vSplitter.addWidget(self.__rightFrame)
 
         # Menu Bar Actions
         menuBarAction_View_ShowMyData = QtWidgets.QAction("Show My Data", self)
@@ -163,20 +172,29 @@ class UserInterface(QtWidgets.QMainWindow):
         self.__progressBar = MyProgressBar()
 
         # Manage the layout
+        leftLayout = QtWidgets.QGridLayout()
+        leftLayout.addWidget(self.__tabs, 0, 0, 1, 2)
+        leftLayout.setContentsMargins(0, 0, 0, 0)
+        self.__leftFrame.setLayout(leftLayout)
+
+        rightLayout = QtWidgets.QGridLayout()
+        rightLayout.addWidget(self.__userInfoLabel, 0, 0, 1, 2)
+        rightLayout.addWidget(self.__userBalanceLabel, 1, 0, 1, 1)
+        rightLayout.addWidget(self.__userBalance, 1, 1, 1, 1)
+        rightLayout.addWidget(self.__makeTransactionInputReceiverIDLabel, 2, 0, 1, 1)
+        rightLayout.addWidget(self.__makeTransactionInputReceiverID, 2, 1, 1, 1)
+        rightLayout.addWidget(self.__makeTransactionInputAmountIDLabel, 3, 0, 1, 1)
+        rightLayout.addWidget(self.__makeTransactionInputAmount, 3, 1, 1, 1)
+        rightLayout.addWidget(self.__makeTransactionButton, 1, 2, 3, 1)
+        rightLayout.addWidget(self.__logFrame, 4, 0, 1, 3)
+        rightLayout.setContentsMargins(0, 0, 0, 0)
+        self.__rightFrame.setLayout(rightLayout)
+
         mainLayout = QtWidgets.QGridLayout()
-        mainLayout.addWidget(self.__tabs, 0, 0, 5, 2)
-        mainLayout.addWidget(self.__userInfoLabel, 0, 2, 1, 2)
-        mainLayout.addWidget(self.__userBalanceLabel, 1, 2, 1, 1)
-        mainLayout.addWidget(self.__userBalance, 1, 3, 1, 1)
-        mainLayout.addWidget(self.__makeTransactionInputReceiverIDLabel, 2, 2, 1, 1)
-        mainLayout.addWidget(self.__makeTransactionInputReceiverID, 2, 3, 1, 1)
-        mainLayout.addWidget(self.__makeTransactionInputAmountIDLabel, 3, 2, 1, 1)
-        mainLayout.addWidget(self.__makeTransactionInputAmount, 3, 3, 1, 1)
-        mainLayout.addWidget(self.__makeTransactionButton, 1, 4, 3, 1)
-        mainLayout.addWidget(self.__logFrame, 4, 2, 1, 3)
-        mainLayout.addWidget(self.__dnsUpdateButton, 5, 0, 1, 1)
-        mainLayout.addWidget(self.__awlUpdateButton, 5, 1, 1, 1)
-        mainLayout.addWidget(self.__progressBar, 5, 2, 1, 3)
+        mainLayout.addWidget(self.__vSplitter, 0, 0, 1, 3)
+        mainLayout.addWidget(self.__dnsUpdateButton, 1, 0, 1, 1)
+        mainLayout.addWidget(self.__awlUpdateButton, 1, 1, 1, 1)
+        mainLayout.addWidget(self.__progressBar, 1, 2, 1, 1)
 
         self.__centralWidget.setLayout(mainLayout)
         self.show()
