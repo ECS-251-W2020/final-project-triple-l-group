@@ -52,6 +52,53 @@ class MyProgressBar(QtWidgets.QProgressBar):
         return self._text
 
 
+class MyInputDialog(QtWidgets.QDialog):
+
+    def __init__(self, parent, programTitle, questions, defaultAns=None):
+        super(MyInputDialog, self).__init__(parent)
+        self.questions = [QtWidgets.QLabel(self) for _ in range(len(questions))]
+        self.ans = [QtWidgets.QLineEdit() for _ in range(len(questions))]
+        self.reply = None
+        self.setWindowTitle(programTitle)
+
+        self.__mainFrame = QtWidgets.QFrame()
+        mainFrameLayout = QtWidgets.QGridLayout()
+        for index, question in enumerate(questions):
+            self.questions[index].setText(question)
+            if defaultAns:
+                self.ans[index].setText(defaultAns[index])
+            mainFrameLayout.addWidget(self.questions[index], index, 0)
+            mainFrameLayout.addWidget(self.ans[index], index, 1)
+
+        self.__mainFrame.setLayout(mainFrameLayout)
+
+        self.__okButton = QtWidgets.QPushButton("OK", self)
+        self.__okButton.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
+        self.__okButton.clicked.connect(lambda: self._btnHandler(True))
+
+        self.__cancelButton = QtWidgets.QPushButton("Cancel", self)
+        self.__cancelButton.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
+        self.__cancelButton.clicked.connect(lambda: self._btnHandler(False))
+
+        mainLayout = QtWidgets.QGridLayout()
+        mainLayout.addWidget(self.__mainFrame, 0, 0, 1, 2)
+        mainLayout.addWidget(self.__okButton, 1, 0, 1, 1)
+        mainLayout.addWidget(self.__cancelButton, 1, 1, 1, 1)
+
+        self.setLayout(mainLayout)
+
+    @classmethod
+    def getText(cls, parent, programTitle, questions, defaultAns=None):
+        dialog = cls(parent, programTitle, questions, defaultAns)
+        dialog.exec_()
+        return dialog.ans, dialog.reply
+
+    def _btnHandler(self, reply):
+        self.ans = [ansSlot.text() for ansSlot in self.ans]
+        self.reply = reply
+        self.close()
+
+
 class UserInterface(QtWidgets.QMainWindow):
 
     def __init__(self):
@@ -64,9 +111,12 @@ class UserInterface(QtWidgets.QMainWindow):
         self.__windowWidth = 1000
         self.__programTitle = "Account Wise Ledger User Interface"
 
-        self.__accountID = self.getInputFromPopUpDialog("Your User Name:")
+        [self.__accountID, dnsIP, dnsPort], okPressed = MyInputDialog.getText(self, self.__programTitle, ["Your Name:", "DNS IP:", "DNS Port:"], [socket.gethostname(), self.__getHostnameIP(), "8000"])
+        if not okPressed:
+            sys.exit(0)
+
         self.__accountSubNetwork = ""
-        self.__accountWiseLedgerDNS = ("192.168.0.11", 8000)
+        self.__accountWiseLedgerDNS = (dnsIP, int(dnsPort))
         self.__nodeList = {}
         self.__nodeLastBlockHash = {}
         self.__accountWiseLedgerList = {}
@@ -205,7 +255,7 @@ class UserInterface(QtWidgets.QMainWindow):
                 self.__send({"type": "New Peer", "senderID": self.__accountID}, self.__accountWiseLedgerDNS)
                 self.__nodeList = self.__listen()["data"]
                 break
-            except:
+            except KeyError:
                 pass
 
         self.__accountSubNetwork = str(self.__nodeList["nodeToSubNetwork"][self.__accountID])
@@ -448,11 +498,6 @@ class UserInterface(QtWidgets.QMainWindow):
             self.__transactionHistoriesTable.setItem(rowIndex, self.__transactionHistoriesTableHeader["Receiver ID"], QtWidgets.QTableWidgetItem(transaction["receiverID"]))
             self.__transactionHistoriesTable.setItem(rowIndex, self.__transactionHistoriesTableHeader["Amount"], QtWidgets.QTableWidgetItem(str(transaction["amount"])))
             self.__transactionHistoriesTable.setItem(rowIndex, self.__transactionHistoriesTableHeader["Time"], QtWidgets.QTableWidgetItem(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(transaction["timestamp"]))))
-
-    def getInputFromPopUpDialog(self, questionString):
-        inputText, okPressed = QtWidgets.QInputDialog.getText(self, self.__programTitle, questionString, QtWidgets.QLineEdit.Normal, "")
-        if okPressed and inputText:
-            return inputText
 
     def dnsUpdateButtonHandler(self):
         outputMsg = {"type": "Request DNS Update", "senderID": self.__accountID}
