@@ -1,7 +1,6 @@
 # Account Wise Ledger: A New Design of Decentralized System
-Yi-Chen Liu, Che-Yu Liu , Jia-Wei Liang, UC Davis
-© 2020 Copyright held by the owner/author(s).
-
+Yi-Chen Liu, Che-Yu Liu , Jia-Wei Liang<br>
+© 2020 Copyright held by the owner/author(s).<br>
 ---
 ## Introduction
 Account-Wise Ledger is a new decentralized blockchain system with a lower storage burden and higher security. The two main designs of the system are Account-Wise Ledger and Three-End Commitment.
@@ -92,3 +91,7 @@ In order to execute the whole system, a user need to establish the DNS first the
 Note, there are some requirement for this program that you should pre-install/ setup in your computer:
 1. The python version should be `Python 3.7`
 1. Make sure that you have installed the `PyQt5` module.
+
+## Copyright
+Permission to make digital or hard copies of part or all of this work for personal or classroom use is granted without fee provided. Copyrights for third-party components of this work must be honored. For all other uses, contact the owner/author(s).<br>
+[![license](https://img.shields.io/github/license/DAVFoundation/captain-n3m0.svg?style=flat-square)](https://github.com/ECS-251-W2020/final-project-triple-l-group/blob/master/LICENSE)

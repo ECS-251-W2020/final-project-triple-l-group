@@ -14,13 +14,13 @@ SOCKET_BUFFER_SIZE = 64 * 1024 * 1024
 class MyListenThread(QThread):
     listenedMsg = pyqtSignal(dict)
 
-    def __init__(self, parent, title, socket, timeout=None):
+    def __init__(self, parent, title, mySocket, timeout=None):
         super(MyListenThread, self).__init__()
         self.__mainWindow = parent
         self.__programTitle = title
 
         self.__mutex = QMutex()
-        self.__socket = socket
+        self.__socket = mySocket
         self.__socketTimeout = timeout
 
     def run(self):
@@ -146,7 +146,7 @@ class UserInterface(QtWidgets.QMainWindow):
         # Initialize Multi-Threading for Listening
         self.__mutex = QMutex()
         self.__listenThread = MyListenThread(self, self.__programTitle, self.__socket)
-        self.__listenThread.listenedMsg.connect(self.__updateLocal)
+        self.__listenThread.listenedMsg.connect(self.__listen)
         self.__listenThread.start()
 
         # Initialize Last Block Hash Table
@@ -291,7 +291,7 @@ class UserInterface(QtWidgets.QMainWindow):
             if nodeID != self.__accountID or meInclude:
                 self.__send(outputMsg, tuple(self.__nodeList["all"][nodeID]))
 
-    def __updateLocal(self, inputMsg):
+    def __listen(self, inputMsg):
         if inputMsg["type"] == "New Peer ACK":
             self.__print("[" + inputMsg["senderID"] + "] says hi to me")
 
