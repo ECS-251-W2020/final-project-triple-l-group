@@ -1,6 +1,6 @@
 # Account Wise Ledger: A New Design of Decentralized System
-Yi-Chen Liu, Che-Yu Liu , Jia-Wei Liang<br>
-© 2020 Copyright held by the owner/author(s).<br>
+Yi-Chen Liu, Che-Yu Liu , Jia-Wei Liang © 2020 Copyright held by the owner/author(s).
+
 ---
 ## Introduction
 Account-Wise Ledger is a new decentralized blockchain system with a lower storage burden and higher security. The two main designs of the system are Account-Wise Ledger and Three-End Commitment.
