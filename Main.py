@@ -4,7 +4,6 @@ import socket
 import sys
 import collections
 import time
-import os
 from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtCore import QThread, pyqtSignal, QMutex
 
@@ -170,11 +169,14 @@ class UserInterface(QtWidgets.QMainWindow):
         # Menu Bar Actions
         menuBarAction_View_ShowMyData = QtWidgets.QAction("Show My Data", self)
         menuBarAction_View_ShowMyData.triggered.connect(lambda: self.printLog(""))
+        menuBarAction_View_CleanLog = QtWidgets.QAction("Clean Logs", self)
+        menuBarAction_View_CleanLog.triggered.connect(lambda: self.__logFrame.setText(""))
 
         # Create Menu Bar
         self.__menuBar = self.menuBar()
         self.__menuBar_View = self.__menuBar.addMenu("&View")
         self.__menuBar_View.addAction(menuBarAction_View_ShowMyData)
+        self.__menuBar_View.addAction(menuBarAction_View_CleanLog)
 
         # Create Transactions input Field and Current Balance
         self.__userInfoLabel = QtWidgets.QLabel(self)
@@ -332,15 +334,27 @@ class UserInterface(QtWidgets.QMainWindow):
             self.__nodeLastBlockHash[inputMsg["senderID"]] = inputMsg["data"]
             self.__print("[" + inputMsg["senderID"] + "] gives me its Last Block Hash")
 
+        elif inputMsg["type"] == "Request Receiver ACK":
+            if self.__accountID == inputMsg["data"]["receiverID"]:
+                self.__print("[" + inputMsg["senderID"] + "] asks my ACK of a new task: [" + inputMsg["data"]["senderID"] + "] >> [" + inputMsg["data"]["receiverID"] + "] with $" + str(inputMsg["data"]["amount"]))
+                self.__progressBar.setText("")
+                self.__progressBar.setMaximum(len(self.__nodeList["sizeOfSubNetwork"]) + ((2 * ((self.__nodeList["sizeOfSubNetwork"][self.__accountSubNetwork] - 1) // 2)) if str(self.__nodeList["nodeToSubNetwork"][inputMsg["data"]["senderID"]]) == self.__accountSubNetwork else ((self.__nodeList["sizeOfSubNetwork"][self.__accountSubNetwork] - 1) // 2)))
+                self.__progressBar.setValue(0)
+                self.__makeTransactionInputReceiverID.setEnabled(False)
+                self.__makeTransactionInputAmount.setEnabled(False)
+
+                inputMsg["data"].update({"receiverSignature": self.__accountID})
+                self.__send({"type": "Send Receiver ACK", "data": inputMsg["data"], "senderID": self.__accountID}, tuple(self.__nodeList["all"][inputMsg["senderID"]]))
+
+        elif inputMsg["type"] == "Send Receiver ACK":
+            if inputMsg["data"]["senderID"] == self.__accountID and inputMsg["data"]["receiverID"] == self.__makeTransactionInputReceiverID.text() and inputMsg["data"]["amount"] == int(self.__makeTransactionInputAmount.text()):
+                self.__print("[" + inputMsg["senderID"] + "] gives me its ACK of a new task: [" + inputMsg["data"]["senderID"] + "] >> [" + inputMsg["data"]["receiverID"] + "] with $" + str(inputMsg["data"]["amount"]))
+                broadcastSubNetworkIndex = {self.__accountSubNetwork, str(self.__nodeList["nodeToSubNetwork"][inputMsg["data"]["receiverID"]])}
+                for subNetworkIndex in broadcastSubNetworkIndex:
+                    self.__broadcast({"type": "New Transaction", "data": inputMsg["data"], "senderID": self.__accountID}, set(self.__nodeList["subNetworkToNode"][subNetworkIndex].keys()), True)
+
         elif inputMsg["type"] == "New Transaction":
             if inputMsg["senderID"] == inputMsg["data"]["senderID"]:
-                if self.__accountID == inputMsg["data"]["receiverID"]:
-                    self.__progressBar.setText("")
-                    self.__progressBar.setMaximum(len(self.__nodeList["sizeOfSubNetwork"]) + ((2 * ((self.__nodeList["sizeOfSubNetwork"][self.__accountSubNetwork] - 1) // 2)) if str(self.__nodeList["nodeToSubNetwork"][inputMsg["data"]["senderID"]]) == self.__accountSubNetwork else ((self.__nodeList["sizeOfSubNetwork"][self.__accountSubNetwork] - 1) // 2)))
-                    self.__progressBar.setValue(0)
-                    self.__makeTransactionInputReceiverID.setEnabled(False)
-                    self.__makeTransactionInputAmount.setEnabled(False)
-
                 self.__print("[" + inputMsg["senderID"] + "] gives me a new task: [" + inputMsg["data"]["senderID"] + "] >> [" + inputMsg["data"]["receiverID"] + "] with $" + str(inputMsg["data"]["amount"]))
                 highCouncilMemberDict = self.__highCouncilMemberElection(inputMsg["data"])
 
@@ -355,7 +369,7 @@ class UserInterface(QtWidgets.QMainWindow):
 
         elif inputMsg["type"] == "Check Valid Transaction":
             if str(self.__nodeList["nodeToSubNetwork"][inputMsg["target"]]) == self.__accountSubNetwork:
-                if self.__accountWiseLedgerList[inputMsg["target"]].viewPlanningBalance >= 0 and inputMsg["data"]["amount"] > 0:
+                if self.__accountWiseLedgerList[inputMsg["target"]].viewPlanningBalance >= 0 and inputMsg["data"]["amount"] > 0 and inputMsg["data"]["receiverSignature"] == inputMsg["data"]["receiverID"]:
                     self.__send({"type": "Ans Valid Transaction", "target": inputMsg["target"], "data": inputMsg["data"], "ans": "True", "senderID": self.__accountID}, tuple(self.__nodeList["all"][inputMsg["senderID"]]))
                     self.__print("[" + inputMsg["senderID"] + "] asks me the validity of: [" + inputMsg["data"]["senderID"] + "] >> [" + inputMsg["data"]["receiverID"] + "] with $" + str(inputMsg["data"]["amount"]) + ". I said Yes")
                 else:
@@ -367,7 +381,7 @@ class UserInterface(QtWidgets.QMainWindow):
             wonValidTransactionResult = max(self.__voteValidTransaction[inputMsg["target"]].keys(), key=lambda x: self.__voteValidTransaction[inputMsg["target"]][x])
 
             if self.__voteValidTransaction[inputMsg["target"]][wonValidTransactionResult] > (self.__nodeList["sizeOfSubNetwork"][self.__accountSubNetwork] - 1) // 2:
-                if wonValidTransactionResult == "True":
+                if wonValidTransactionResult == "True" and inputMsg["data"]["receiverSignature"] == inputMsg["data"]["receiverID"]:
                     senderSideBlock = self.__accountWiseLedgerList[self.__accountID].createNewBlock(inputMsg["data"], self.__nodeLastBlockHash[inputMsg["data"]["senderID"]])
                     receiverSideBlock = self.__accountWiseLedgerList[self.__accountID].createNewBlock(inputMsg["data"], self.__nodeLastBlockHash[inputMsg["data"]["receiverID"]])
 
@@ -421,6 +435,8 @@ class UserInterface(QtWidgets.QMainWindow):
                             if inputMsg["data"]["senderID"] == self.__accountID:
                                 self.__progressBar.setText("Task Incomplete")
                                 self.__progressBar.reset()
+                                self.__makeTransactionInputReceiverID.setEnabled(True)
+                                self.__makeTransactionInputAmount.setEnabled(True)
                             self.__print("<High Council> told me this task is invalid. Therefore, task abort")
                         del self.__voteSenderBlock[taskCode]
 
@@ -445,6 +461,8 @@ class UserInterface(QtWidgets.QMainWindow):
                             if inputMsg["data"]["receiverID"] == self.__accountID:
                                 self.__progressBar.setText("Task Incomplete")
                                 self.__progressBar.reset()
+                                self.__makeTransactionInputReceiverID.setEnabled(True)
+                                self.__makeTransactionInputAmount.setEnabled(True)
                             self.__print("<High Council> told me this task is invalid. Therefore, task abort")
                         del self.__voteReceiverBlock[taskCode]
 
@@ -511,14 +529,11 @@ class UserInterface(QtWidgets.QMainWindow):
                 self.__makeTransactionInputAmount.setText("")
                 self.__makeTransactionInputReceiverID.setText("")
             elif not self.__makeTransactionInputReceiverID.isEnabled() or not self.__makeTransactionInputAmount.isEnabled():
-                self.__print("************SYSTEM IS BUSY**************")
+                self.__print("************THE SYSTEM IS BUSY**************")
 
             elif 0 < int(self.__makeTransactionInputAmount.text()) <= self.__accountWiseLedgerList[self.__accountID].viewPlanningBalance and self.__makeTransactionInputReceiverID.text() != self.__accountID:
-                task = {"senderID": self.__accountID, "receiverID": self.__makeTransactionInputReceiverID.text(), "amount": int(self.__makeTransactionInputAmount.text()), "timestamp": time.time()}
-
-                broadcastSubNetworkIndex = {self.__accountSubNetwork, str(self.__nodeList["nodeToSubNetwork"][task["receiverID"]])}
-                for subNetworkIndex in broadcastSubNetworkIndex:
-                    self.__broadcast({"type": "New Transaction", "data": task, "senderID": self.__accountID}, set(self.__nodeList["subNetworkToNode"][subNetworkIndex].keys()), True)
+                newTask = {"senderID": self.__accountID, "receiverID": self.__makeTransactionInputReceiverID.text(), "amount": int(self.__makeTransactionInputAmount.text()), "timestamp": time.time()}
+                self.__send({"type": "Request Receiver ACK", "data": newTask, "senderID": self.__accountID}, tuple(self.__nodeList["all"][self.__makeTransactionInputReceiverID.text()]))
 
                 self.__makeTransactionInputReceiverID.setEnabled(False)
                 self.__makeTransactionInputAmount.setEnabled(False)

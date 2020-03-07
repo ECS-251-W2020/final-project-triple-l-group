@@ -2,6 +2,7 @@ import threading
 import socket
 import json
 import os
+import sys
 from pprint import pprint
 
 
@@ -41,9 +42,13 @@ class AccountWiseLedgerDNS(object):
 
     def listen(self):
         while True:
-            inputMsg, sourceAddress = self.__socket.recvfrom(self.__socketBufferSize)
-            inputMsg = json.loads(inputMsg.decode())
-            newPeer = None
+            try:
+                inputMsg, sourceAddress = self.__socket.recvfrom(self.__socketBufferSize)
+                inputMsg = json.loads(inputMsg.decode())
+                newPeer = None
+            except ConnectionResetError:
+                print("Error occurred. Server shutdown...")
+                sys.exit(0)
 
             if inputMsg["type"] == "exit":
                 break
