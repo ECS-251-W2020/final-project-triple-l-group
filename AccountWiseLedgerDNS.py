@@ -36,7 +36,11 @@ class AccountWiseLedgerDNS(object):
 
     def __getHostnameIP(self):
         try:
-            return socket.gethostbyname(socket.gethostname())
+            tmpS = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            tmpS.connect(("8.8.8.8", 80))
+            ans = tmpS.getsockname()[0]
+            tmpS.close()
+            return ans
         except:
             return None
 

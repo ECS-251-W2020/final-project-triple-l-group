@@ -135,8 +135,9 @@ class UserInterface(QtWidgets.QMainWindow):
         self.__voteAWL = collections.Counter()
 
         # Initialize the socket
+        self.__ip = self.__getHostnameIP()
         self.__socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.__socket.bind((self.__getHostnameIP(), 0))
+        self.__socket.bind((self.__ip, 0))
         self.__socketTimeout = 3
 
         # Initialize data
@@ -280,7 +281,11 @@ class UserInterface(QtWidgets.QMainWindow):
 
     def __getHostnameIP(self):
         try:
-            return socket.gethostbyname(socket.gethostname())
+            tmpS = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            tmpS.connect(("8.8.8.8", 80))
+            ans = tmpS.getsockname()[0]
+            tmpS.close()
+            return ans
         except:
             return None
 
