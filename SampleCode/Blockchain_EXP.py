@@ -7,6 +7,7 @@ from uuid import uuid4
 import requests
 from flask import Flask, jsonify, request
 
+
 # Create a Blockchain Class
 class Blockchain:
     def __init__(self):
@@ -20,8 +21,7 @@ class Blockchain:
     def register_node(self, address):
 
         # Add a new node to the list of nodes
-        :param address: Address of node.
-
+        # :param address: Address of node.
 
         parsed_url = urlparse(address)
         if parsed_url.netloc:
@@ -32,13 +32,11 @@ class Blockchain:
         else:
             raise ValueError('Invalid URL')
 
-
     def valid_chain(self, chain):
 
         # Determine if a given blockchain is valid
-        :param chain: A blockchain
-        :return: True if valid, False if not
-
+        # :param chain: A blockchain
+        # :return: True if valid, False if not
 
         last_block = chain[0]
         current_index = 1
@@ -65,9 +63,8 @@ class Blockchain:
     def resolve_conflicts(self):
 
         # This is our consensus algorithm, it resolves conflicts
-        by replacing our chain with the longest one in the network.
-        :return: True if our chain was replaced, False if not
-
+        # by replacing our chain with the longest one in the network.
+        # :return: True if our chain was replaced, False if not
 
         neighbours = self.nodes
         new_chain = None
@@ -98,10 +95,9 @@ class Blockchain:
     def new_block(self, proof, previous_hash):
 
         # Create a new Block in the Blockchain
-        :param proof: The proof given by the Proof of Work algorithm
-        :param previous_hash: Hash of previous Block
-        :return: New Block
-
+        # :param proof: The proof given by the Proof of Work algorithm
+        # :param previous_hash: Hash of previous Block
+        # :return: New Block
 
         block = {
             'index': len(self.chain) + 1,
@@ -120,12 +116,12 @@ class Blockchain:
     def new_transaction(self, sender, recipient, amount):
 
         # Creates a new transaction to go into the next mined Block
-        :param sender: Address of the Sender
-        :param recipient: Address of the Recipient
-        :param amount: Amount
-        :return: The index of the Block that will hold this transaction
+        # :param sender: Address of the Sender
+        # :param recipient: Address of the Recipient
+        # :param amount: Amount
+        # :return: The index of the Block that will hold this transaction
 
-        # self.current_transactions.append({
+        self.current_transactions.append({
             'sender': sender,
             'recipient': recipient,
             'amount': amount,
@@ -140,9 +136,8 @@ class Blockchain:
     @staticmethod
     def hash(block):
 
-       # Creates a SHA-256 hash of a Block
-        :param block: Block
-
+        # Creates a SHA-256 hash of a Block
+        # :param block: Block
 
         # We must make sure that the Dictionary is Ordered, or we'll have inconsistent hashes
         block_string = json.dumps(block, sort_keys=True).encode()
@@ -151,12 +146,10 @@ class Blockchain:
     def proof_of_work(self, last_block):
 
         # Simple Proof of Work Algorithm:
-         - Find a number p' such that hash(pp') contains leading 4 zeroes
-         - Where p is the previous proof, and p' is the new proof
-
-        :param last_block: <dict> last Block
-        :return: <int>
-        """
+        # - Find a number p' such that hash(pp') contains leading 4 zeroes
+        # - Where p is the previous proof, and p' is the new proof
+        # :param last_block: <dict> last Block
+        # :return: <int>
 
         last_proof = last_block['proof']
         last_hash = self.hash(last_block)
@@ -170,12 +163,11 @@ class Blockchain:
     @staticmethod
     def valid_proof(last_proof, proof, last_hash):
 
-       # Validates the Proof
-        :param last_proof: <int> Previous Proof
-        :param proof: <int> Current Proof
-        :param last_hash: <str> The hash of the Previous Block
-        :return: <bool> True if correct, False if not.
-
+        # Validates the Proof
+        # :param last_proof: <int> Previous Proof
+        # :param proof: <int> Current Proof
+        # :param last_hash: <str> The hash of the Previous Block
+        # :return: <bool> True if correct, False if not.
 
         guess = f'{last_proof}{proof}{last_hash}'.encode()
         guess_hash = hashlib.sha256(guess).hexdigest()
