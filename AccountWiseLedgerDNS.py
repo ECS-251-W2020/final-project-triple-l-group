@@ -108,6 +108,7 @@ class AccountWiseLedgerDNS(object):
                     print("Please insert a valid number.")
             elif inputMsg == "cfg":
                 print("Current Local Administrator: ", socket.gethostname())
+                print("System Platform: ", self.__platform)
                 print("IP Address: ", self.__ip)
                 print("Port Number: ", self.__port)
                 print("Socket Buffer Size: ", self.__socketBufferSize)
