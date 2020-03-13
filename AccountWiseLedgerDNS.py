@@ -22,7 +22,7 @@ class AccountWiseLedgerDNS(object):
 
         try:
             self.__socket.bind((self.__ip, self.__port))
-            print("DNS is hosted on", self.__platform, ". The system is online, the IP/Port is [", self.__ip, ":", self.__port, "]. Type in \"man\" to browse available commands")
+            print("DNS is hosted on [", self.__platform, "]. The IP/Port is [", self.__ip + ":" + str(self.__port), "]. Type in \"man\" to browse available commands")
         except:
             print("Error occurred. Server shutdown...")
             return
