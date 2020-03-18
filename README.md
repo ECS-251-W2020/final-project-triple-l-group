@@ -7,59 +7,105 @@ Account-Wise Ledger is a new decentralized blockchain system with a lower storag
 * **Account-Wise Ledger**  is a new type of blockchain data structure. Different from the original approach of the blockchain which mixes everyone’s transaction data and information together into a single chain and requires all participants to store a full copy of the data on that chain in order to join the network, we categorize every transaction by account. Each account is a single ledger book that cannot be sliced into multiple pieces but should contain every transaction respected to the account only, which can be considered as an atom-like unit.
 * **Three-End Commitment** is a new consensus protocol that increases the security in the designed system, we remove the competition reward which is gained from the block creation. The following steps summarize this approach: (1) The sender announces the transaction task to each sub-network and the receiver; (2) The receiver announces the acknowledgment of each sub-network. The message includes the task information that is sent from the sender and receiver’s signature to prove that the task is accepted and verified by the receiver; (3) Each sub-network randomly selects one node as the representative operator; (4) Representative operators create the block by solving Proof-of-Work, then broadcast to each node in the whole network; (5) The operators who create the majority answer share the reward.
 
+## Algorithm Design
+The algorithm can be discussed into two parts: Account-Wise Ledger and Three-End commitment. Here elaborated detail steps of the algorithm has been implemented.
+### Account-Wise Ledger
+Account-Wise Ledger is a data structure that contains everyone's information into an atom-like structure. For each ledger, it would contain the user's ID, user's address, user's current transaction balance, and the whole transaction history stored in a blockchain. In order to implement this concept by actual programming code, we create Account-Wise Ledger as a class which has the following structure:
+```
+class AccountWiseLedger
+    public:
+        method constructor
+        method setTransaction
+        method createNewBlock
+        method receiveResult
+        method viewOwnerID
+        method viewSubNetwork
+        method viewPowDifficulty
+        method viewActualBalance
+        method viewPendingBalance
+        method viewPlanningBalance
+        method viewTransactionTask
+        method viewTransactionTaskHandler
+        method viewLastBlock
+        method viewBlockchain
+        method outputDict
+        method outputJsonBytes
+    private:
+        variable ownerID
+        variable subNetwork
+        variable powDifficulty
+        variable transactionBalance
+        variable transactionTask
+        variable transactionTaskHandler
+        variable blockchain
+```
+### Three-End Commitment
+Three-End Commitment is an actual communication protocol. We listed down the steps that a single communication would take as follow:
+1. The sender announces the departure-task to everyone in the network and the receiver.
+1. The sender's side transaction-block-creating procedure start:
+    1. The receiver announces the acknowledgment to everyone. The message includes the task information that is sent from the sender and receiver's signature to prove that the task is accepted and verified by the receiver.
+    1. Each sub-network randomly elect one node as the representative operator
+    1. Every representative operator from each sub-network will create the block by solving Proof-of-Work, then broadcast to everyone in the whole network.
+    1. Everyone starts to verify each block that it received, calculating the majority of the correct answer. The majority of the operators who create the correct answer would share the reward.
+1. The sender announces the destination-task to everyone in the network and the receiver.
+1. The receiver's side transaction-block-creating procedure start:
+    1. The receiver announces the acknowledgment to everyone. The message includes the task information that is sent from the sender and receiver's signature to prove that the task is accepted and verified by the receiver.
+    1. Each sub-network randomly elect one node as the representative operator
+    1. Every representative operator from each sub-network will create the block by solving Proof-of-Work, then broadcast to everyone in the whole network.
+    1. Everyone starts to verify each block that it received, calculating the majority of the correct answer. The majority of the operators who create the correct answer would share the reward.
 
-## System Design
+## Code Design
 The system needs to build up a DNS for any new peer to connect to the cloud. After acquiring a DNS table from the DNS, new users can connect to the cloud directly without any intermediate routers. The communication package should be well-defined. The data structure of each package is described as below.
 ### DNS Table
 Once any node trying to establish a new connection with the DNS, the DNS will send back the DNS table, which is a `JSON` format.
 ```
-    DNSTable {
-        "all": {
-            memberID_1: [memberID_1_IP, memberID_1_PORT]
-            memberID_2: [memberID_2_IP, memberID_2_PORT]
-            ...
-        }
-        "subNetworkToIndex" {
-            sebNetWorkID_1 (str): {
-                memberID_1_1_Index: memberID_1_1 
-                memberID_1_2_Index: memberID_1_2 
-                memberID_1_3_Index: memberID_1_3
-                ...
-            }
-            sebNetworkID_2 (str): {
-                memberID_2_1_Index: memberID_2_1 
-                memberID_2_2_Index: memberID_2_2 
-                memberID_2_3_Index: memberID_2_3
-                ...
-            }
-            ...
-        }
-        "subNetworkToNode" {
-            sebNetworkID_1 (str): {
-                memberID_1_1: memberID_1_1_Index
-                memberID_1_2: memberID_1_2_Index 
-                memberID_1_3: memberID_1_3_Index
-                ...
-            }
-            sebNetworkID_2 (str): {
-                memberID_2_1: memberID_2_1_Index 
-                memberID_2_2: memberID_2_2_Index 
-                memberID_2_3: memberID_2_3_Index
-                ...
-            }
-            ...
-        }
-        "nodeToSubNetwork" {
-            memberID_1_1: sebNetworkID_1 (int)
-            memberID_2_1: sebNetworkID_2 (int)
-            ...
-        }
-        "sizeOfSubNetwork" {
-            sebNetworkID_1: len(sebNetworkID_1)
-            sebNetworkID_2: len(sebNetworkID_2)
-            ...
-        }
+DNSTable {
+    "all": {
+        memberID_1: [memberID_1_IP, memberID_1_PORT]
+        memberID_2: [memberID_2_IP, memberID_2_PORT]
+        ...
     }
+    "subNetworkToIndex" {
+        sebNetWorkID_1 (str): {
+            memberID_1_1_Index: memberID_1_1 
+            memberID_1_2_Index: memberID_1_2 
+            memberID_1_3_Index: memberID_1_3
+            ...
+        }
+        sebNetworkID_2 (str): {
+            memberID_2_1_Index: memberID_2_1 
+            memberID_2_2_Index: memberID_2_2 
+            memberID_2_3_Index: memberID_2_3
+            ...
+        }
+        ...
+    }
+    "subNetworkToNode" {
+        sebNetworkID_1 (str): {
+            memberID_1_1: memberID_1_1_Index
+            memberID_1_2: memberID_1_2_Index 
+            memberID_1_3: memberID_1_3_Index
+            ...
+        }
+        sebNetworkID_2 (str): {
+            memberID_2_1: memberID_2_1_Index 
+            memberID_2_2: memberID_2_2_Index 
+            memberID_2_3: memberID_2_3_Index
+            ...
+        }
+        ...
+    }
+    "nodeToSubNetwork" {
+        memberID_1_1: sebNetworkID_1 (int)
+        memberID_2_1: sebNetworkID_2 (int)
+        ...
+    }
+    "sizeOfSubNetwork" {
+        sebNetworkID_1: len(sebNetworkID_1)
+        sebNetworkID_2: len(sebNetworkID_2)
+        ...
+    }
+}
 ```
 ### Client Instruction Package
 Client Instruction Packages is a network package with a `JSON` format sent from each peer. The purpose of the usage of these packages is allowing peers to communicate with each other. Any peer can use the information contained in packages to proceed with corresponding reactions. Each package contains the following information:
