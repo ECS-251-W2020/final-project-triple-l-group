@@ -1,6 +1,7 @@
 import threading
 import socket
 import json
+import platform
 import os
 import sys
 from pprint import pprint
@@ -10,6 +11,7 @@ class AccountWiseLedgerDNS(object):
     
     def __init__(self, K):
         self.__socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.__platform = platform.system()
         self.__ip = self.__getHostnameIP()
         self.__port = 8000
         self.__socketBufferSize = 64 * 1024 * 1024
@@ -20,7 +22,7 @@ class AccountWiseLedgerDNS(object):
 
         try:
             self.__socket.bind((self.__ip, self.__port))
-            print("DNS is online, the IP/Port is [", self.__ip, ":", self.__port, "]. Type in \"man\" to browse available commands")
+            print("DNS is hosted on [", self.__platform, "]. The IP/Port is [", self.__ip + ":" + str(self.__port), "]. Type in \"man\" to browse available commands")
         except:
             print("Error occurred. Server shutdown...")
             return
@@ -36,7 +38,11 @@ class AccountWiseLedgerDNS(object):
 
     def __getHostnameIP(self):
         try:
-            return socket.gethostbyname(socket.gethostname())
+            tmpS = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            tmpS.connect(("8.8.8.8", 80))
+            ans = tmpS.getsockname()[0]
+            tmpS.close()
+            return ans
         except:
             return None
 
@@ -89,7 +95,10 @@ class AccountWiseLedgerDNS(object):
                 self.__resetDNSTable()
                 print("DNS table is cleaned up.")
             elif inputMsg == "cls":
-                os.system("cls")
+                if self.__platform == "Windows":
+                    os.system("cls")
+                else:
+                    os.system("clear")
             elif inputMsg[:4] == "setk":
                 try:
                     self.__K_numOfSubNetwork = int(inputMsg.split(" ")[1])
@@ -99,6 +108,7 @@ class AccountWiseLedgerDNS(object):
                     print("Please insert a valid number.")
             elif inputMsg == "cfg":
                 print("Current Local Administrator: ", socket.gethostname())
+                print("System Platform: ", self.__platform)
                 print("IP Address: ", self.__ip)
                 print("Port Number: ", self.__port)
                 print("Socket Buffer Size: ", self.__socketBufferSize)
